@@ -4,7 +4,6 @@ import cn.hutool.http.HttpRequest;
 import cn.hutool.http.HttpResponse;
 import com.sakame.model.RpcRequest;
 import com.sakame.model.RpcResponse;
-import com.sakame.model.User;
 import com.sakame.serializer.JdkSerializer;
 import com.sakame.serializer.Serializer;
 
@@ -31,6 +30,7 @@ public class ServiceProxy implements InvocationHandler {
                 .parameterTypes(method.getParameterTypes())
                 .args(args)
                 .build();
+
         try {
             byte[] bodyBytes = serializer.serialize(rpcRequest);
             // todo:修改硬编码

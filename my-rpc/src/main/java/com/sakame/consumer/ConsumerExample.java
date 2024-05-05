@@ -1,7 +1,6 @@
 package com.sakame.consumer;
 
 import com.sakame.model.User;
-import com.sakame.provider.UserServiceImpl;
 import com.sakame.proxy.ServiceProxyFactory;
 import com.sakame.service.UserService;
 
