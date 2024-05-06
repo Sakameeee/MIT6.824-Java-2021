@@ -43,6 +43,7 @@ public class Sequential {
                     stringBuilder.append(line);
                 }
 
+                // 收集所有的 kv
                 List<KeyValue> kva = (List) map.invoke(objects[2], fileName, stringBuilder.toString());
                 for (KeyValue kv: kva) {
                     intermediate.add(kv);
@@ -60,7 +61,7 @@ public class Sequential {
                 .sorted(Comparator.comparing(KeyValue::getKey))
                 .collect(Collectors.toList());
 
-        // 文件位置
+        // 输出文件位置
         String mrDir = userDir + "\\map-reduce\\tmp";
         if (!FileUtil.exist(mrDir)) {
             FileUtil.mkdir(mrDir);

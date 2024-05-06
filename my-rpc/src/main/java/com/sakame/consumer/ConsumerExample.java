@@ -1,8 +1,10 @@
 package com.sakame.consumer;
 
+import com.sakame.config.RpcConfig;
 import com.sakame.model.User;
 import com.sakame.proxy.ServiceProxyFactory;
 import com.sakame.service.UserService;
+import com.sakame.utils.ConfigUtils;
 
 /**
  * @author sakame
@@ -10,14 +12,17 @@ import com.sakame.service.UserService;
  */
 public class ConsumerExample {
     public static void main(String[] args) {
-        UserService userService = ServiceProxyFactory.getProxy(UserService.class);
-        User user = new User();
-        user.setName("sakame");
-        User newUser = userService.getUser(user);
-        if (newUser != null) {
-            System.out.println(newUser.getName());
-        } else {
-            System.out.println("error");
-        }
+//        UserService userService = ServiceProxyFactory.getProxy(UserService.class);
+//        User user = new User();
+//        user.setName("sakame");
+//        User newUser = userService.getUser(user);
+//        if (newUser != null) {
+//            System.out.println(newUser.getName());
+//        } else {
+//            System.out.println("error");
+//        }
+
+        RpcConfig rpcConfig = ConfigUtils.loadConfig(RpcConfig.class, "rpc");
+        System.out.println(rpcConfig);
     }
 }
