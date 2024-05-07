@@ -40,6 +40,11 @@ public class RpcConfig {
     private Integer serverPort = 8080;
 
     /**
+     * 模拟调用
+     */
+    private boolean mock = false;
+
+    /**
      * 单例
      */
     private static volatile RpcConfig rpcConfig;
@@ -64,7 +69,7 @@ public class RpcConfig {
         if (rpcConfig == null) {
             synchronized (RpcConfig.class) {
                 if (rpcConfig == null) {
-                    rpcConfig = new RpcConfig();
+                    rpcConfig = ConfigUtils.loadConfig(RpcConfig.class, "rpc");
                 }
             }
         }

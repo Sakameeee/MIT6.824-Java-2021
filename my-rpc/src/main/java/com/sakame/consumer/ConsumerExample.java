@@ -12,17 +12,15 @@ import com.sakame.utils.ConfigUtils;
  */
 public class ConsumerExample {
     public static void main(String[] args) {
-//        UserService userService = ServiceProxyFactory.getProxy(UserService.class);
-//        User user = new User();
-//        user.setName("sakame");
-//        User newUser = userService.getUser(user);
-//        if (newUser != null) {
-//            System.out.println(newUser.getName());
-//        } else {
-//            System.out.println("error");
-//        }
-
-        RpcConfig rpcConfig = ConfigUtils.loadConfig(RpcConfig.class, "rpc");
-        System.out.println(rpcConfig);
+        UserService userService = ServiceProxyFactory.getProxy(UserService.class);
+        User user = new User();
+        user.setName("sakame");
+        User newUser = userService.getUser(user);
+        if (newUser != null) {
+            System.out.println(newUser.getName());
+        } else {
+            System.out.println("error");
+        }
+        System.out.println(userService.getNumber());
     }
 }

@@ -13,4 +13,6 @@ public interface UserService {
      * @return
      */
     User getUser(User user);
+
+    int getNumber();
 }
