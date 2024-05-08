@@ -52,6 +52,11 @@ public class RpcConfig {
     private boolean mock = false;
 
     /**
+     * 注册中心配置
+     */
+    private RegistryConfig registryConfig = new RegistryConfig();
+
+    /**
      * 单例
      */
     private static volatile RpcConfig rpcConfig;
@@ -76,7 +81,7 @@ public class RpcConfig {
         if (rpcConfig == null) {
             synchronized (RpcConfig.class) {
                 if (rpcConfig == null) {
-                    rpcConfig = ConfigUtils.loadConfig(RpcConfig.class, "rpc");
+                    rpcConfig = ConfigUtils.loadConfig(RpcConfig.class, RpcConstant.DEFAULT_CONFIG_PREFIX);
                 }
             }
         }
