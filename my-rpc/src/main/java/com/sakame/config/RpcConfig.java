@@ -1,6 +1,8 @@
 package com.sakame.config;
 
 import com.sakame.constant.RpcConstant;
+import com.sakame.serializer.Serializer;
+import com.sakame.serializer.SerializerKeys;
 import com.sakame.utils.ConfigUtils;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -38,6 +40,11 @@ public class RpcConfig {
      * 端口号
      */
     private Integer serverPort = 8080;
+
+    /**
+     * 序列化器
+     */
+    private String serializer = SerializerKeys.JDK;
 
     /**
      * 模拟调用

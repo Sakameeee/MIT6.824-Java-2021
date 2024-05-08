@@ -1,10 +1,12 @@
 package com.sakame.server;
 
+import com.sakame.config.RpcConfig;
 import com.sakame.model.RpcRequest;
 import com.sakame.model.RpcResponse;
 import com.sakame.registry.LocalRegistry;
 import com.sakame.serializer.JdkSerializer;
 import com.sakame.serializer.Serializer;
+import com.sakame.serializer.SerializerFactory;
 import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServerRequest;
@@ -21,7 +23,7 @@ public class HttpServerHandler implements Handler<HttpServerRequest> {
     @Override
     public void handle(HttpServerRequest httpServerRequest) {
         // 指定序列化器
-        final Serializer serializer = new JdkSerializer();
+        final Serializer serializer = SerializerFactory.getInstance(RpcConfig.getRpcConfig().getSerializer());
 
         // 记录日志
         System.out.println("Received request:" + httpServerRequest.method() + " " + httpServerRequest.uri());

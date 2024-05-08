@@ -1,0 +1,3 @@
+jdk=com.sakame.serializer.JdkSerializer
+json=com.sakame.serializer.JsonSerializer
+kryo=com.sakame.serializer.KryoSerializer
