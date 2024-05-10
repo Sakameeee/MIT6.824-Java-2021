@@ -1,10 +1,8 @@
 package com.sakame.consumer;
 
-import com.sakame.config.RpcConfig;
 import com.sakame.model.User;
 import com.sakame.proxy.ServiceProxyFactory;
 import com.sakame.service.UserService;
-import com.sakame.utils.ConfigUtils;
 
 /**
  * @author sakame

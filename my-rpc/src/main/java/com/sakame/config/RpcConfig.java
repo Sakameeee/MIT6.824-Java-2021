@@ -1,6 +1,8 @@
 package com.sakame.config;
 
 import com.sakame.constant.RpcConstant;
+import com.sakame.registry.Registry;
+import com.sakame.registry.RegistryFactory;
 import com.sakame.serializer.Serializer;
 import com.sakame.serializer.SerializerKeys;
 import com.sakame.utils.ConfigUtils;
@@ -39,7 +41,7 @@ public class RpcConfig {
     /**
      * 端口号
      */
-    private Integer serverPort = 8080;
+    private Integer serverPort = 8081;
 
     /**
      * 序列化器
@@ -70,7 +72,17 @@ public class RpcConfig {
         rpcConfig.setVersion(newRpcConfig.getVersion());
         rpcConfig.setServerHost(newRpcConfig.getServerHost());
         rpcConfig.setServerPort(newRpcConfig.getServerPort());
+        rpcConfig.setMock(newRpcConfig.isMock());
+        rpcConfig.setRegistryConfig(newRpcConfig.getRegistryConfig());
+        rpcConfig.setSerializer(newRpcConfig.getSerializer());
         log.info("rpc init, config = {}", rpcConfig);
+
+        RegistryConfig registryConfig = rpcConfig.getRegistryConfig();
+        Registry registry = RegistryFactory.getInstance(registryConfig.getRegistry());
+        registry.init(registryConfig);
+        log.info("registry init, config = {}", registryConfig);
+
+        Runtime.getRuntime().addShutdownHook(new Thread(registry::destroy));
     }
 
     /**
@@ -82,6 +94,7 @@ public class RpcConfig {
             synchronized (RpcConfig.class) {
                 if (rpcConfig == null) {
                     rpcConfig = ConfigUtils.loadConfig(RpcConfig.class, RpcConstant.DEFAULT_CONFIG_PREFIX);
+                    init(rpcConfig);
                 }
             }
         }

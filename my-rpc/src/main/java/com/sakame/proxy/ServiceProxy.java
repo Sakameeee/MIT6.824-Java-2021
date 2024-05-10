@@ -10,7 +10,6 @@ import com.sakame.model.RpcResponse;
 import com.sakame.model.ServiceMetaInfo;
 import com.sakame.registry.Registry;
 import com.sakame.registry.RegistryFactory;
-import com.sakame.serializer.JdkSerializer;
 import com.sakame.serializer.Serializer;
 import com.sakame.serializer.SerializerFactory;
 
