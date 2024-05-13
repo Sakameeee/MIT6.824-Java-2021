@@ -6,7 +6,6 @@ import com.sakame.model.ServiceMetaInfo;
 import com.sakame.registry.LocalRegistry;
 import com.sakame.registry.Registry;
 import com.sakame.registry.RegistryFactory;
-import com.sakame.serializer.SerializerKeys;
 import com.sakame.server.HttpServer;
 import com.sakame.server.VertxHttpServer;
 import com.sakame.service.UserService;

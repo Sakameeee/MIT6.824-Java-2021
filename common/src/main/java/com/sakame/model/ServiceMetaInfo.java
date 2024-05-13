@@ -17,6 +17,11 @@ public class ServiceMetaInfo {
     private String serviceName;
 
     /**
+     * 实现类
+     */
+    private String implClass;
+
+    /**
      * 服务版本号
      */
     private String serviceVersion;

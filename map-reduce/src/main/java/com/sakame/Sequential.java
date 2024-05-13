@@ -66,7 +66,7 @@ public class Sequential {
         if (!FileUtil.exist(mrDir)) {
             FileUtil.mkdir(mrDir);
         }
-        String ofile = mrDir + File.separator + "mr-out-0.txt";
+        String ofile = mrDir + File.separator + "mr-correct-wc.txt";
 
         // 调用 reduce 函数并写入内容到文件
         try {

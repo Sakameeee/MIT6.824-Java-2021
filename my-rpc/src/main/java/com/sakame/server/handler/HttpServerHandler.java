@@ -1,4 +1,4 @@
-package com.sakame.server;
+package com.sakame.server.handler;
 
 import com.sakame.config.RpcConfig;
 import com.sakame.model.RpcRequest;
@@ -11,6 +11,8 @@ import io.vertx.core.Handler;
 import io.vertx.core.buffer.Buffer;
 import io.vertx.core.http.HttpServerRequest;
 import io.vertx.core.http.HttpServerResponse;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -19,7 +21,12 @@ import java.lang.reflect.Method;
  * @author sakame
  * @version 1.0
  */
+@AllArgsConstructor
+@NoArgsConstructor
 public class HttpServerHandler implements Handler<HttpServerRequest> {
+
+    private Object instance;
+
     @Override
     public void handle(HttpServerRequest httpServerRequest) {
         // 指定序列化器
@@ -48,9 +55,18 @@ public class HttpServerHandler implements Handler<HttpServerRequest> {
 
             // 反射调用服务类并返回响应
             try {
-                Class<?> implClass = LocalRegistry.get(rpcRequest.getServiceName());
-                Method method = implClass.getMethod(rpcRequest.getMethodName(), rpcRequest.getParameterTypes());
-                Object result = method.invoke(implClass.newInstance(), rpcRequest.getArgs());
+                Class<?> implClass = null;
+                Method method = null;
+                Object result = null;
+                if (instance == null) {
+                    implClass = LocalRegistry.get(rpcRequest.getServiceName());
+                    method = implClass.getMethod(rpcRequest.getMethodName(), rpcRequest.getParameterTypes());
+                    result = method.invoke(implClass.newInstance(), rpcRequest.getArgs());
+                } else {
+                    implClass = instance.getClass();
+                    method = implClass.getMethod(rpcRequest.getMethodName(), rpcRequest.getParameterTypes());
+                    result = method.invoke(instance, rpcRequest.getArgs());
+                }
                 rpcResponse.setData(result);
                 rpcResponse.setMessage("ok");
                 rpcResponse.setDataType(method.getReturnType());

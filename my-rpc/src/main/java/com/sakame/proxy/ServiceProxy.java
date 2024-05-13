@@ -32,7 +32,7 @@ public class ServiceProxy implements InvocationHandler {
 
         // 发请求
         String serviceName = method.getDeclaringClass().getName();
-        RpcRequest rpcRequest =RpcRequest.builder()
+        RpcRequest rpcRequest = RpcRequest.builder()
                 .serviceName(serviceName)
                 .methodName(method.getName())
                 .parameterTypes(method.getParameterTypes())
