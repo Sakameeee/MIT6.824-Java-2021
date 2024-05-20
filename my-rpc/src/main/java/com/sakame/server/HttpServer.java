@@ -10,4 +10,9 @@ public interface HttpServer {
      * @param port
      */
     void doStart(int port);
+
+    /**
+     * 关闭服务器
+     */
+    void doShutdown();
 }

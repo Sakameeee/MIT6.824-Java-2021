@@ -2,6 +2,7 @@ package com.sakame.server;
 
 import com.sakame.server.handler.HttpServerHandler;
 import io.vertx.core.Vertx;
+import io.vertx.core.http.HttpServerOptions;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -12,17 +13,22 @@ import org.checkerframework.checker.units.qual.N;
  * @version 1.0
  */
 @Data
-@AllArgsConstructor
 @NoArgsConstructor
 public class VertxHttpServer implements HttpServer{
 
     private Object instance;
 
+    private io.vertx.core.http.HttpServer httpServer;
+
+    public VertxHttpServer(Object o) {
+        instance = o;
+    }
+
     @Override
     public void doStart(int port) {
         Vertx vertx = Vertx.vertx();
 
-        io.vertx.core.http.HttpServer httpServer = vertx.createHttpServer();
+        httpServer = vertx.createHttpServer(new HttpServerOptions());
 
         if (instance == null) {
             httpServer.requestHandler(new HttpServerHandler());
@@ -37,5 +43,13 @@ public class VertxHttpServer implements HttpServer{
                 System.out.println("Failed to start server:" + result.cause());
             }
         });
+    }
+
+    @Override
+    public void doShutdown() {
+        if (httpServer == null) {
+            return;
+        }
+        httpServer.close();
     }
 }

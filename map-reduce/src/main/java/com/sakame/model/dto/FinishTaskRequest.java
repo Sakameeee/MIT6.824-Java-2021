@@ -1,4 +1,4 @@
-package com.sakame.model.mr;
+package com.sakame.model.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -15,7 +15,7 @@ import java.io.Serializable;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class FinishTaskArgs implements Serializable {
+public class FinishTaskRequest implements Serializable {
     /**
      * worker id
      */

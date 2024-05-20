@@ -6,13 +6,12 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import com.sakame.constant.TaskType;
 import com.sakame.model.KeyValue;
-import com.sakame.model.mr.FinishTaskArgs;
-import com.sakame.model.mr.FinishTaskReply;
-import com.sakame.model.mr.GetTaskArgs;
-import com.sakame.model.mr.GetTaskReply;
+import com.sakame.model.dto.FinishTaskRequest;
+import com.sakame.model.dto.FinishTaskResponse;
+import com.sakame.model.dto.GetTaskRequest;
+import com.sakame.model.dto.GetTaskResponse;
 import com.sakame.proxy.ServiceProxyFactory;
 import com.sakame.service.CoordinatorService;
-import com.sakame.utils.FileUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.*;
@@ -21,7 +20,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.zip.CRC32;
 
@@ -81,41 +79,41 @@ public class Worker {
         Method reduce = (Method)objects[1];
 
         while (true) {
-            GetTaskArgs getTaskArgs = new GetTaskArgs();
-            System.out.println("get task request:" + getTaskArgs);
-            GetTaskReply getTaskReply = callGetTask(getTaskArgs);
-            System.out.println("receive task reply:" + getTaskReply);
+            GetTaskRequest getTaskRequest = new GetTaskRequest();
+            System.out.println("get task request:" + getTaskRequest);
+            GetTaskResponse getTaskResponse = callGetTask(getTaskRequest);
+            System.out.println("receive task reply:" + getTaskResponse);
 
-            if (getTaskReply == null || getTaskReply.getType() == TaskType.STOP) {
+            if (getTaskResponse == null || getTaskResponse.getType() == TaskType.STOP) {
                 return;
             }
 
             // 处理 map 函数
-            switch (getTaskReply.getType()) {
+            switch (getTaskResponse.getType()) {
                 case TaskType.MAP:
-                    if (CollUtil.isEmpty(getTaskReply.getFileNames())) {
+                    if (CollUtil.isEmpty(getTaskResponse.getFileNames())) {
                         // todo
                     }
-                    doMap(map, getTaskReply, objects[2]);
-                    FinishTaskArgs finishTaskArgs = FinishTaskArgs.builder()
-                            .taskId(getTaskReply.getTaskId())
+                    doMap(map, getTaskResponse, objects[2]);
+                    FinishTaskRequest finishTaskRequest = FinishTaskRequest.builder()
+                            .taskId(getTaskResponse.getTaskId())
                             .type(TaskType.MAP)
                             .build();
-                    System.out.println("finish request:" + finishTaskArgs);
-                    callFinishTask(finishTaskArgs);
+                    System.out.println("finish request:" + finishTaskRequest);
+                    callFinishTask(finishTaskRequest);
                     System.out.println("receive finish reply:");
                     break;
                 case TaskType.REDUCE:
-                    if (CollUtil.isEmpty(getTaskReply.getFileNames())) {
+                    if (CollUtil.isEmpty(getTaskResponse.getFileNames())) {
                         // todo
                     }
-                    doReduce(reduce, getTaskReply, objects[2]);
-                    FinishTaskArgs finishTaskArgs1 = FinishTaskArgs.builder()
-                            .taskId(getTaskReply.getTaskId())
+                    doReduce(reduce, getTaskResponse, objects[2]);
+                    FinishTaskRequest finishTaskRequest1 = FinishTaskRequest.builder()
+                            .taskId(getTaskResponse.getTaskId())
                             .type(TaskType.REDUCE)
                             .build();
-                    System.out.println("finish request:" + finishTaskArgs1);
-                    callFinishTask(finishTaskArgs1);
+                    System.out.println("finish request:" + finishTaskRequest1);
+                    callFinishTask(finishTaskRequest1);
                     System.out.println("receive finish reply:");
                     break;
                 case TaskType.WAIT:
@@ -143,7 +141,7 @@ public class Worker {
      * @param reply
      * @param instance
      */
-    public void doMap(Method map, GetTaskReply reply, Object instance) {
+    public void doMap(Method map, GetTaskResponse reply, Object instance) {
         String fileName = reply.getFileNames().get(0);
         int nReduce = reply.getNReduce();
         List<KeyValue> kva = new ArrayList<>();
@@ -222,7 +220,7 @@ public class Worker {
      * @param reply
      * @param instance
      */
-    public void doReduce(Method reduce, GetTaskReply reply, Object instance) {
+    public void doReduce(Method reduce, GetTaskResponse reply, Object instance) {
         List<String> fileNames = reply.getFileNames();
         // 从临时文件中读取 map 计算的 kv
         List<KeyValue> kva = new ArrayList<>();
@@ -299,7 +297,7 @@ public class Worker {
      * @param args
      * @return
      */
-    public GetTaskReply callGetTask(GetTaskArgs args) {
+    public GetTaskResponse callGetTask(GetTaskRequest args) {
         CoordinatorService coordinatorService = ServiceProxyFactory.getProxy(CoordinatorService.class);
         return coordinatorService.getTask(args);
     }
@@ -309,7 +307,7 @@ public class Worker {
      * @param args
      * @return
      */
-    public FinishTaskReply callFinishTask(FinishTaskArgs args) {
+    public FinishTaskResponse callFinishTask(FinishTaskRequest args) {
         CoordinatorService coordinatorService = ServiceProxyFactory.getProxy(CoordinatorService.class);
         return coordinatorService.finishTask(args);
     }

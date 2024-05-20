@@ -2,12 +2,11 @@ package com.sakame;
 
 import com.sakame.config.RegistryConfig;
 import com.sakame.model.ServiceMetaInfo;
-import com.sakame.provider.ProviderExample;
 import com.sakame.registry.EtcdRegistry;
 import com.sakame.registry.Registry;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
@@ -21,7 +20,7 @@ public class RegistryTest {
 
     final Registry registry = new EtcdRegistry();
 
-    @Before
+    @BeforeAll
     public void init() {
         RegistryConfig registryConfig = new RegistryConfig();
         registryConfig.setAddress("http://localhost:2379");
@@ -69,7 +68,7 @@ public class RegistryTest {
         String serviceKey = serviceMetaInfo.getServiceKey();
         List<ServiceMetaInfo> list = registry.serviceDiscovery(serviceKey);
         Thread.sleep(1000000000L);
-        Assert.assertNotNull(list);
+        Assertions.assertNotNull(list);
     }
 
     @Test

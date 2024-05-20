@@ -55,7 +55,7 @@ public class EtcdRegistry implements Registry{
                 .connectTimeout(Duration.ofMillis(registryConfig.getTimeout()))
                 .build();
         kvClient = client.getKVClient();
-        heartBeat();
+        heartbeat();
     }
 
     @Override
@@ -143,7 +143,7 @@ public class EtcdRegistry implements Registry{
      * 针对单个服务节点（服务提供者）
      */
     @Override
-    public void heartBeat() {
+    public void heartbeat() {
         CronUtil.schedule("*/10 * * * * *", (Task) () -> {
             for (String key : localRegisterNodeKeySet) {
                 try {

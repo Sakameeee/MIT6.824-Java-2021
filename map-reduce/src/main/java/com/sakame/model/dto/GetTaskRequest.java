@@ -1,4 +1,4 @@
-package com.sakame.model.mr;
+package com.sakame.model.dto;
 
 import lombok.Data;
 
@@ -9,7 +9,7 @@ import java.io.Serializable;
  * @version 1.0
  */
 @Data
-public class GetTaskArgs implements Serializable {
+public class GetTaskRequest implements Serializable {
     /**
      * worker 的唯一标识
      */

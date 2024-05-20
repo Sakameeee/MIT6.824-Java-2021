@@ -12,6 +12,7 @@ import com.sakame.registry.Registry;
 import com.sakame.registry.RegistryFactory;
 import com.sakame.serializer.Serializer;
 import com.sakame.serializer.SerializerFactory;
+import lombok.NoArgsConstructor;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationHandler;
@@ -23,7 +24,21 @@ import java.util.List;
  * @author sakame
  * @version 1.0
  */
+@NoArgsConstructor
 public class ServiceProxy implements InvocationHandler {
+
+    private boolean callAll = false;
+
+    private int chosen = -1;
+
+    public ServiceProxy(boolean b, int except) {
+        callAll = b;
+        chosen = except;
+    }
+
+    public ServiceProxy(int i) {
+        chosen = i;
+    }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -53,7 +68,12 @@ public class ServiceProxy implements InvocationHandler {
                 throw new RuntimeException("no service address");
             }
             // todo:修改选择
-            ServiceMetaInfo selectedServiceMetaInfo = list.get(0);
+            ServiceMetaInfo selectedServiceMetaInfo;
+            if (chosen != -1) {
+                selectedServiceMetaInfo = list.get(chosen);
+            } else {
+                selectedServiceMetaInfo = list.get(0);
+            }
 
             // 发送请求
             try (HttpResponse httpResponse = HttpRequest.post(selectedServiceMetaInfo.getServiceAddress())

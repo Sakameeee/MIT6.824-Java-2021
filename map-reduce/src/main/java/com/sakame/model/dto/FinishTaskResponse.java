@@ -1,4 +1,4 @@
-package com.sakame.model.mr;
+package com.sakame.model.dto;
 
 import lombok.Data;
 
@@ -9,7 +9,7 @@ import java.io.Serializable;
  * @version 1.0
  */
 @Data
-public class FinishTaskReply implements Serializable {
+public class FinishTaskResponse implements Serializable {
     /**
      * 是否成功接收
      */

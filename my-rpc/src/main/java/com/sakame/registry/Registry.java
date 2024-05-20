@@ -46,7 +46,7 @@ public interface Registry {
     /**
      * 心跳机制（服务端）
      */
-    void heartBeat();
+    void heartbeat();
 
     /**
      * 服务监听（消费端）

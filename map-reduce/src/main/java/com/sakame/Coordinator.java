@@ -9,16 +9,15 @@ import com.sakame.constant.TaskType;
 import com.sakame.model.CoordinatorStatus;
 import com.sakame.model.ServiceMetaInfo;
 import com.sakame.model.Task;
-import com.sakame.model.mr.FinishTaskArgs;
-import com.sakame.model.mr.FinishTaskReply;
-import com.sakame.model.mr.GetTaskArgs;
-import com.sakame.model.mr.GetTaskReply;
+import com.sakame.model.dto.FinishTaskRequest;
+import com.sakame.model.dto.FinishTaskResponse;
+import com.sakame.model.dto.GetTaskRequest;
+import com.sakame.model.dto.GetTaskResponse;
 import com.sakame.registry.Registry;
 import com.sakame.registry.RegistryFactory;
 import com.sakame.server.HttpServer;
 import com.sakame.server.VertxHttpServer;
 import com.sakame.service.CoordinatorService;
-import io.netty.util.NetUtil;
 
 import java.io.File;
 import java.nio.file.DirectoryStream;
@@ -62,57 +61,57 @@ public class Coordinator implements CoordinatorService {
 
     /**
      * rpc handler，获取任务（消费端调用）
-     * @param getTaskArgs
+     * @param getTaskRequest
      * @return
      */
     @Override
-    public GetTaskReply getTask(GetTaskArgs getTaskArgs) {
+    public GetTaskResponse getTask(GetTaskRequest getTaskRequest) {
         status.getReentrantLock().lock();
 
         if (isAllFinish()) {
             nextPhase();
         }
 
-        GetTaskReply getTaskReply = new GetTaskReply();
+        GetTaskResponse getTaskResponse = new GetTaskResponse();
         List<Task> tasks = status.getTasks();
         for (int i = 0; i < tasks.size(); i++) {
             Task task = tasks.get(i);
-            getTaskReply.setTaskId(i);
+            getTaskResponse.setTaskId(i);
             if (task.getStatus() == TaskStatus.IDLE) {
                 System.out.println("send task " + i + " to worker");
                 if (status.getStatus() == MasterStatus.MAP_PHASE) {
                     // 在 map 任务里有 mapCount 个任务，每个任务的文件数组都是一样的，大小为 mapCount
                     // worker 只需要一个文件就能完成任务
-                    getTaskReply.setFileNames(Arrays.asList(task.getFiles().get(i)));
-                    getTaskReply.setType(TaskType.MAP);
-                    getTaskReply.setNReduce(status.getNReduce());
+                    getTaskResponse.setFileNames(Arrays.asList(task.getFiles().get(i)));
+                    getTaskResponse.setType(TaskType.MAP);
+                    getTaskResponse.setNReduce(status.getNReduce());
                 } else if (status.getStatus() == MasterStatus.REDUCE_PHASE) {
                     // 在 reduce 任务中有 nReduce 个任务，每个任务的文件数组大小都为 mapCount
                     // worker 需要所有桶编号相同的文件才能完成任务
-                    getTaskReply.setFileNames(task.getFiles());
-                    getTaskReply.setType(TaskType.REDUCE);
-                    getTaskReply.setNReduce(0);
+                    getTaskResponse.setFileNames(task.getFiles());
+                    getTaskResponse.setType(TaskType.REDUCE);
+                    getTaskResponse.setNReduce(0);
                 }
                 task.setStartTime(LocalDateTime.now());
                 task.setStatus(TaskStatus.IN_PROGRESS);
                 status.getReentrantLock().unlock();
-                return getTaskReply;
+                return getTaskResponse;
             } else if (task.getStatus() == TaskStatus.IN_PROGRESS) {
                 if (task.getStartTime().plus(Duration.ofSeconds(10)).isBefore(LocalDateTime.now())) {
                     System.out.println("resend task " + i + " to worker");
                     if (status.getStatus() == MasterStatus.MAP_PHASE) {
-                        getTaskReply.setFileNames(Arrays.asList(task.getFiles().get(i)));
-                        getTaskReply.setType(TaskType.MAP);
-                        getTaskReply.setNReduce(status.getNReduce());
+                        getTaskResponse.setFileNames(Arrays.asList(task.getFiles().get(i)));
+                        getTaskResponse.setType(TaskType.MAP);
+                        getTaskResponse.setNReduce(status.getNReduce());
                     } else if (status.getStatus() == MasterStatus.REDUCE_PHASE) {
-                        getTaskReply.setFileNames(task.getFiles());
-                        getTaskReply.setType(TaskType.REDUCE);
-                        getTaskReply.setNReduce(0);
+                        getTaskResponse.setFileNames(task.getFiles());
+                        getTaskResponse.setType(TaskType.REDUCE);
+                        getTaskResponse.setNReduce(0);
                     }
                     task.setStartTime(LocalDateTime.now());
                     task.setStatus(TaskStatus.IN_PROGRESS);
                     status.getReentrantLock().unlock();
-                    return getTaskReply;
+                    return getTaskResponse;
                 }
             }
         }
@@ -123,21 +122,21 @@ public class Coordinator implements CoordinatorService {
 
     /**
      * rpc handler，提交完成任务（消费端调用）
-     * @param finishTaskArgs
+     * @param finishTaskRequest
      * @return
      */
     @Override
-    public FinishTaskReply finishTask(FinishTaskArgs finishTaskArgs) {
+    public FinishTaskResponse finishTask(FinishTaskRequest finishTaskRequest) {
         status.getReentrantLock().lock();
-        FinishTaskReply reply = new FinishTaskReply();
+        FinishTaskResponse reply = new FinishTaskResponse();
 
-        if (finishTaskArgs.getTaskId() < 0 || finishTaskArgs.getTaskId() > status.getTasks().size()) {
+        if (finishTaskRequest.getTaskId() < 0 || finishTaskRequest.getTaskId() > status.getTasks().size()) {
             // todo
             reply.setOK(false);
             status.getReentrantLock().unlock();
             return reply;
         }
-        status.getTasks().get(finishTaskArgs.getTaskId()).setStatus(TaskStatus.COMPLETED);
+        status.getTasks().get(finishTaskRequest.getTaskId()).setStatus(TaskStatus.COMPLETED);
         if (isAllFinish()) {
             nextPhase();
         }

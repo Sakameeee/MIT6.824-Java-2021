@@ -1,4 +1,4 @@
-package com.sakame.model.mr;
+package com.sakame.model.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -17,7 +17,7 @@ import java.util.List;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class GetTaskReply implements Serializable {
+public class GetTaskResponse implements Serializable {
     /**
      * 任务 id
      */
