@@ -29,7 +29,7 @@ public class Raft implements RaftService {
 
     private final Random random = new Random();
 
-    private static final int HEARTBEAT_INTERVAL = 100;
+    private static final int HEARTBEAT_INTERVAL = 50;
 
     @Override
     public RequestVoteResponse requestVote(RequestVoteRequest request) {
@@ -41,7 +41,7 @@ public class Raft implements RaftService {
 
         RequestVoteResponse response = new RequestVoteResponse();
         log.info("raft:{} receive RequestVoteRequest:{}", state.getMe(), request);
-        log.info("current state:term:{},commitIndex:{},lastApplied:{},lastLog:{}", state.getCurrentTerm(), state.getCommitIndex(), state.getLastApplied(), getLastLog());
+        log.info("raft:{} current state:term:{}, votedFor:{}, lastLog:{}",state.getMe(), state.getCurrentTerm(), state.getVotedFor(), getLastLog());
 
         if (request.getTerm() < state.getCurrentTerm()) {
             response.setVoteGranted(false);
@@ -312,6 +312,9 @@ public class Raft implements RaftService {
                 return;
             }
         }
+
+        state.setCurrentTerm(state.getCurrentTerm() - 1);
+        log.info("raft:{}'s current term:{}", state.getMe(), state.getCurrentTerm());
     }
 
     /**
@@ -319,14 +322,16 @@ public class Raft implements RaftService {
      */
     public void heartbeat() {
         RaftService[] peers = state.getPeers();
-        try {
-            for (int i = 0; i < peers.length; i++) {
+        for (int i = 0; i < peers.length; i++) {
+            if (i == state.getMe()) {
+                continue;
+            }
+            try {
                 final int server = i;
                 CompletableFuture.runAsync(() -> {
                     peers[server].requestHeartbeat();
                 }).get();
-            }
-        } catch (Exception e) {
+            } catch (Exception e) {}
         }
     }
 
@@ -352,7 +357,7 @@ public class Raft implements RaftService {
             switch (state.getState()) {
                 case RaftConstant.FOLLOWER:
                     if (electionTimeout()) {
-                        log.info("raft:{} start an election", state.getMe());
+                        log.info("raft:{} starts an election", state.getMe());
                         doElection();
                         resetElectionTimer();
                     }
@@ -365,7 +370,7 @@ public class Raft implements RaftService {
                     break;
                 case RaftConstant.CANDIDATE:
                     if (electionTimeout()) {
-                        log.info("raft:{} start an re-election", state.getMe());
+                        log.info("raft:{} starts a re-election", state.getMe());
                         doElection();
                         resetElectionTimer();
                     }
@@ -373,7 +378,7 @@ public class Raft implements RaftService {
             }
             state.getLock().unlock();
             try {
-                Thread.sleep(50);
+                Thread.sleep(5);
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
@@ -407,8 +412,7 @@ public class Raft implements RaftService {
      */
     public void resetElectionTimer() {
         int time = random.nextInt(400 - 150 + 1) + 150;
-        int offset = random.nextInt(100);
-        state.setElectionTimer(LocalDateTime.now().plus(Duration.ofMillis(time + offset)));
+        state.setElectionTimer(LocalDateTime.now().plus(Duration.ofMillis(time)));
     }
 
     /**

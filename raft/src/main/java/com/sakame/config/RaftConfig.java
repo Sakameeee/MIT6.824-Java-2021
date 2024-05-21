@@ -73,10 +73,6 @@ public class RaftConfig {
      */
     private LocalDateTime testTime;
 
-    private int rpcs;
-
-    private int cmds;
-
     private int maxIndex;
 
     private static RaftConfig raftConfig = new RaftConfig();
