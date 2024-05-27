@@ -6,12 +6,13 @@ import java.io.*;
  * @author sakame
  * @version 1.0
  */
-public class JdkSerializer implements Serializer{
+public class JdkSerializer implements Serializer {
     /**
      * 序列化
+     *
      * @param object
-     * @return
      * @param <T>
+     * @return
      * @throws IOException
      */
     @Override
@@ -25,10 +26,11 @@ public class JdkSerializer implements Serializer{
 
     /**
      * 反序列化
+     *
      * @param bytes
      * @param type
-     * @return
      * @param <T>
+     * @return
      * @throws IOException
      */
     @Override

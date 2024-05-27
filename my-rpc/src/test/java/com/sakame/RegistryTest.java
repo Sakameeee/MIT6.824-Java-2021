@@ -13,6 +13,7 @@ import java.util.List;
 
 /**
  * 注册中心测试
+ *
  * @author sakame
  * @version 1.0
  */

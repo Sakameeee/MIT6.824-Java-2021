@@ -5,6 +5,7 @@ import lombok.Data;
 
 /**
  * 服务元信息
+ *
  * @author sakame
  * @version 1.0
  */
@@ -43,6 +44,7 @@ public class ServiceMetaInfo {
 
     /**
      * 获取服务键名
+     *
      * @return
      */
     public String getServiceKey() {
@@ -51,6 +53,7 @@ public class ServiceMetaInfo {
 
     /**
      * 获取服务注册节点键名
+     *
      * @return
      */
     public String getServiceNodeKey() {

@@ -25,6 +25,7 @@ import java.util.zip.CRC32;
 
 /**
  * worker 类
+ *
  * @author sakame
  * @version 1.0
  */
@@ -42,6 +43,7 @@ public class Worker {
 
     /**
      * 根据类名加载对应的 map 和 reduce 函数
+     *
      * @param fileName
      * @return
      */
@@ -61,6 +63,7 @@ public class Worker {
     /**
      * use ihash(key) % NReduce to choose the reduce
      * task number for each KeyValue emitted by Map.
+     *
      * @param key
      * @return
      */
@@ -72,11 +75,12 @@ public class Worker {
 
     /**
      * 启动一个 worker 进程
+     *
      * @param objects
      */
     public void startWorker(Object[] objects) {
-        Method map = (Method)objects[0];
-        Method reduce = (Method)objects[1];
+        Method map = (Method) objects[0];
+        Method reduce = (Method) objects[1];
 
         while (true) {
             GetTaskRequest getTaskRequest = new GetTaskRequest();
@@ -137,6 +141,7 @@ public class Worker {
 
     /**
      * 执行 map 任务
+     *
      * @param map
      * @param reply
      * @param instance
@@ -186,7 +191,7 @@ public class Worker {
         int index;
         int nextIndex = 0;
         int n = kva.size();
-        for (int i = 0; i < n;) {
+        for (int i = 0; i < n; ) {
             index = ihash(kva.get(i).getKey()) % nReduce;
             try {
                 FileWriter fileWriter = new FileWriter(files.get(index), true);
@@ -216,6 +221,7 @@ public class Worker {
 
     /**
      * 执行 reduce 任务
+     *
      * @param reduce
      * @param reply
      * @param instance
@@ -263,7 +269,7 @@ public class Worker {
             file.deleteOnExit();
             FileWriter fileWriter = new FileWriter(file, true);
             BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
-            for (int i = 0; i < kva.size();) {
+            for (int i = 0; i < kva.size(); ) {
                 // 记录 key 相同的 value 范围
                 int j = i + 1;
                 while (j < kva.size()
@@ -294,6 +300,7 @@ public class Worker {
 
     /**
      * 通过 rpc 向 coordinator 请求分配任务
+     *
      * @param args
      * @return
      */
@@ -304,6 +311,7 @@ public class Worker {
 
     /**
      * 通过 rpc 向 coordinator 提交已完成任务
+     *
      * @param args
      * @return
      */

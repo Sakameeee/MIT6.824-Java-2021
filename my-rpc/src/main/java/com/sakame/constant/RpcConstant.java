@@ -2,6 +2,7 @@ package com.sakame.constant;
 
 /**
  * rpc 相关常量
+ *
  * @author sakame
  * @version 1.0
  */

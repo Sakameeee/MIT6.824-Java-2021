@@ -1,6 +1,5 @@
 package com.sakame.serializer;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sakame.model.RpcRequest;
 import com.sakame.model.RpcResponse;
@@ -9,10 +8,11 @@ import java.io.IOException;
 
 /**
  * josn 序列化器
+ *
  * @author sakame
  * @version 1.0
  */
-public class JsonSerializer implements Serializer{
+public class JsonSerializer implements Serializer {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
@@ -23,10 +23,11 @@ public class JsonSerializer implements Serializer{
 
     /**
      * 处理 RpcRequest 的异常对象类型
+     *
      * @param bytes
      * @param type
-     * @return
      * @param <T>
+     * @return
      * @throws IOException
      */
     @Override
@@ -43,10 +44,11 @@ public class JsonSerializer implements Serializer{
 
     /**
      * 处理 RpcRequest 的异常对象类型
+     *
      * @param rpcRequest
      * @param type
-     * @return
      * @param <T>
+     * @return
      * @throws IOException
      */
     private <T> T handleRequest(RpcRequest rpcRequest, Class<T> type) throws IOException {

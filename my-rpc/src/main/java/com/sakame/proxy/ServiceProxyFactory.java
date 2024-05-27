@@ -6,15 +6,17 @@ import java.lang.reflect.Proxy;
 
 /**
  * 服务代理工厂
+ *
  * @author sakame
  * @version 1.0
  */
 public class ServiceProxyFactory {
     /**
      * 获取代理对象
+     *
      * @param serviceClass
-     * @return
      * @param <T>
+     * @return
      */
     public static <T> T getProxy(Class<T> serviceClass) {
         if (RpcConfig.getRpcConfig().isMock()) {

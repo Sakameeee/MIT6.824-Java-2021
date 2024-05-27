@@ -7,6 +7,7 @@ import java.lang.reflect.Method;
 
 /**
  * 模拟调用
+ *
  * @author sakame
  * @version 1.0
  */
@@ -23,11 +24,11 @@ public class MockServiceProxy implements InvocationHandler {
         if (c.isPrimitive()) {
             if (c == short.class) {
                 return 0;
-            } else if(c == boolean.class) {
+            } else if (c == boolean.class) {
                 return true;
             } else if (c == long.class) {
                 return 0L;
-            } else if (c == int.class){
+            } else if (c == int.class) {
                 return 0;
             }
         }

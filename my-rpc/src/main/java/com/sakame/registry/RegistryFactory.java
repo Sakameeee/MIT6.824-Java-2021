@@ -5,6 +5,7 @@ import java.util.Map;
 
 /**
  * 注册中心工厂
+ *
  * @author sakame
  * @version 1.0
  */

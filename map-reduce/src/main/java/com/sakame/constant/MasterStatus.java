@@ -2,6 +2,7 @@ package com.sakame.constant;
 
 /**
  * coordinator 常量
+ *
  * @author sakame
  * @version 1.0
  */

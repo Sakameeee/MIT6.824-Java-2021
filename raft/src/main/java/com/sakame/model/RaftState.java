@@ -2,6 +2,7 @@ package com.sakame.model;
 
 import com.sakame.Persister;
 import com.sakame.constant.RaftConstant;
+import com.sakame.model.dto.ApplyMsg;
 import com.sakame.service.RaftService;
 import lombok.Data;
 
@@ -60,9 +61,14 @@ public class RaftState {
     private Entry[] logs;
 
     /**
-     * 用于在提交新条目之后唤醒 applier 线程
+     * 用于在提交新条目之后唤醒 applyLog 线程
      */
     private Condition applyCond = lock.newCondition();
+
+    /**
+     * 用于和 application 通信
+     */
+    private Channel<ApplyMsg> channel;
 
     /**
      * 用于唤醒 replicator 线程开始复制日志
@@ -77,12 +83,12 @@ public class RaftState {
     /**
      * 最近提交的日志条目的索引位置
      */
-    private int commitIndex;
+    private int commitIndex = 0;
 
     /**
      * 最后一次应用提交的日志条目的索引位置
      */
-    private int lastApplied;
+    private int lastApplied = 0;
 
     /**
      * 下一要写入日志的索引位置（leader 维护）

@@ -2,13 +2,12 @@ package com.sakame.model;
 
 import lombok.Data;
 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Timer;
 
 /**
  * 任务类
+ *
  * @author sakame
  * @version 1.0
  */

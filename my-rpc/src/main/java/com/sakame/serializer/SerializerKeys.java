@@ -2,6 +2,7 @@ package com.sakame.serializer;
 
 /**
  * 序列化器常量
+ *
  * @author sakame
  * @version 1.0
  */

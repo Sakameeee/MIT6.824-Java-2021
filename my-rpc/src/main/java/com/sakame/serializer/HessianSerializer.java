@@ -9,10 +9,11 @@ import java.io.IOException;
 
 /**
  * Hessian 序列化器
+ *
  * @author sakame
  * @version 1.0
  */
-public class HessianSerializer implements Serializer{
+public class HessianSerializer implements Serializer {
     @Override
     public <T> byte[] serialize(T object) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();

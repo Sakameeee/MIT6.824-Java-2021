@@ -17,21 +17,22 @@ import java.util.stream.Collectors;
 /**
  * 用于输出正确答案，一次性读取所有文件并输出
  * 而在 mr 中所有文件的计算会由多个 worker 进程完成
+ *
  * @author sakame
  * @version 1.0
  */
 public class Sequential {
     public static void main(String[] args) {
         Object[] objects = loadPlugin("WordCount");
-        Method map = (Method)objects[0];
-        Method reduce = (Method)objects[1];
+        Method map = (Method) objects[0];
+        Method reduce = (Method) objects[1];
 
         // 读取所有文件并调用 map 函数
         List<KeyValue> intermediate = new ArrayList<>();
         String userDir = System.getProperty("user.dir");
         String path = userDir + "\\map-reduce\\src\\main\\resources\\";
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(path), "pg-*.txt")) {
-            for (Path file: stream) {
+            for (Path file : stream) {
                 String fileName = file.getParent().toString() + File.separator + file.getFileName().toString();
                 FileReader fileReader = new FileReader(fileName);
                 BufferedReader bufferedReader = new BufferedReader(fileReader);
@@ -45,7 +46,7 @@ public class Sequential {
 
                 // 收集所有的 kv
                 List<KeyValue> kva = (List) map.invoke(objects[2], fileName, stringBuilder.toString());
-                for (KeyValue kv: kva) {
+                for (KeyValue kv : kva) {
                     intermediate.add(kv);
                 }
 
@@ -72,7 +73,7 @@ public class Sequential {
         try {
             FileWriter fileWriter = new FileWriter(ofile);
             BufferedWriter bufferedWriter = new BufferedWriter(fileWriter);
-            for (int i = 0; i < intermediate.size();) {
+            for (int i = 0; i < intermediate.size(); ) {
                 // 记录 key 相同的 value 范围
                 int j = i + 1;
                 while (j < intermediate.size()
@@ -98,6 +99,7 @@ public class Sequential {
 
     /**
      * 根据类名加载对应的 map 和 reduce 函数
+     *
      * @param fileName
      * @return
      */

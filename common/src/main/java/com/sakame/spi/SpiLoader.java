@@ -5,10 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.Serializable;
 import java.net.URL;
-import java.sql.Array;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -19,34 +20,29 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SpiLoader {
 
     /**
-     * 存储已加载的类：接口名 => (key => 实现类)
-     */
-    private static Map<String, Map<String, Class<?>>> loaderMap = new ConcurrentHashMap<>();
-
-    /**
-     * 对象实例缓存
-     */
-    private static Map<String, Object> instanceCache = new ConcurrentHashMap<>();
-
-    /**
      * 系统 SPI 目录
      */
     private static final String RPC_SYSTEM_SPI_DIR = "META-INF/rpc/system/";
-
     /**
      * 自定义 SPI 目录
      */
     private static final String RPC_CUSTOM_SPI_DIR = "META-INF/rpc/custom/";
-
     /**
      * 扫描目录
      */
     private static final String[] SCAN_DIRS = new String[]{RPC_SYSTEM_SPI_DIR, RPC_CUSTOM_SPI_DIR};
-
     /**
      * 要加载的类列表
      */
     private static final List<Class<?>> LOAD_CLASS_LIST = new ArrayList<>();
+    /**
+     * 存储已加载的类：接口名 => (key => 实现类)
+     */
+    private static Map<String, Map<String, Class<?>>> loaderMap = new ConcurrentHashMap<>();
+    /**
+     * 对象实例缓存
+     */
+    private static Map<String, Object> instanceCache = new ConcurrentHashMap<>();
 
     /**
      * 加载所有的接口
@@ -60,6 +56,7 @@ public class SpiLoader {
 
     /**
      * 加载单个接口
+     *
      * @param loadClass
      * @return
      */
@@ -92,10 +89,11 @@ public class SpiLoader {
 
     /**
      * 获取接口类对应的 key 实现类实例
+     *
      * @param tClass
      * @param key
-     * @return
      * @param <T>
+     * @return
      */
     public static <T> T getInstance(Class<?> tClass, String key) {
         String tClassName = tClass.getName();

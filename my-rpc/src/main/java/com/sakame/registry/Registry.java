@@ -7,6 +7,7 @@ import java.util.List;
 
 /**
  * 注册中心
+ *
  * @author sakame
  * @version 1.0
  */
@@ -14,12 +15,14 @@ public interface Registry {
 
     /**
      * 服务中心初始化
+     *
      * @param registryConfig
      */
     void init(RegistryConfig registryConfig);
 
     /**
      * 服务注册（服务端）
+     *
      * @param serviceMetaInfo
      * @throws Exception
      */
@@ -27,12 +30,14 @@ public interface Registry {
 
     /**
      * 注销服务（服务端）
+     *
      * @param serviceMetaInfo
      */
     void unRegister(ServiceMetaInfo serviceMetaInfo);
 
     /**
      * 发现某服务的所有节点（消费端）
+     *
      * @param serviceKey
      * @return
      */
@@ -50,6 +55,7 @@ public interface Registry {
 
     /**
      * 服务监听（消费端）
+     *
      * @param serviceNodeKey
      */
     void watch(String serviceNodeKey);

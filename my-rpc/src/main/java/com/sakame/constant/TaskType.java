@@ -2,6 +2,7 @@ package com.sakame.constant;
 
 /**
  * 任务类型
+ *
  * @author sakame
  * @version 1.0
  */

@@ -4,7 +4,6 @@ import com.sakame.config.RpcConfig;
 import com.sakame.model.RpcRequest;
 import com.sakame.model.RpcResponse;
 import com.sakame.registry.LocalRegistry;
-import com.sakame.serializer.JdkSerializer;
 import com.sakame.serializer.Serializer;
 import com.sakame.serializer.SerializerFactory;
 import io.vertx.core.Handler;
@@ -82,6 +81,7 @@ public class HttpServerHandler implements Handler<HttpServerRequest> {
 
     /**
      * 响应方法，把响应体序列化返回
+     *
      * @param request
      * @param rpcResponse
      * @param serializer

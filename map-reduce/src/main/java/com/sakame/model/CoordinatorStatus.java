@@ -1,8 +1,5 @@
 package com.sakame.model;
 
-import com.sakame.constant.MasterStatus;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -12,6 +9,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 用于状态管理
+ *
  * @author sakame
  * @version 1.0
  */

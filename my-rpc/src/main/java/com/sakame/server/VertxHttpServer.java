@@ -3,10 +3,8 @@ package com.sakame.server;
 import com.sakame.server.handler.HttpServerHandler;
 import io.vertx.core.Vertx;
 import io.vertx.core.http.HttpServerOptions;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.checkerframework.checker.units.qual.N;
 
 /**
  * @author sakame
@@ -14,7 +12,7 @@ import org.checkerframework.checker.units.qual.N;
  */
 @Data
 @NoArgsConstructor
-public class VertxHttpServer implements HttpServer{
+public class VertxHttpServer implements HttpServer {
 
     private Object instance;
 

@@ -9,6 +9,7 @@ import java.io.Serializable;
 
 /**
  * Rpc 响应
+ *
  * @author sakame
  * @version 1.0
  */

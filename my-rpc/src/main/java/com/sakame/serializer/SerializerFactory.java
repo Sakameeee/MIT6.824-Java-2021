@@ -4,6 +4,7 @@ import com.sakame.spi.SpiLoader;
 
 /**
  * 序列化器工厂
+ *
  * @author sakame
  * @version 1.0
  */

@@ -11,6 +11,7 @@ public class LocalRegistry {
 
     /**
      * 注册服务
+     *
      * @param serviceName
      * @param implClass
      */
@@ -20,6 +21,7 @@ public class LocalRegistry {
 
     /**
      * 获取服务
+     *
      * @param serviceName
      * @return
      */
@@ -29,6 +31,7 @@ public class LocalRegistry {
 
     /**
      * 删除服务
+     *
      * @param serviceName
      */
     public static void remove(String serviceName) {

@@ -10,10 +10,11 @@ import java.io.IOException;
 
 /**
  * kryo 序列化器
+ *
  * @author sakame
  * @version 1.0
  */
-public class KryoSerializer implements Serializer{
+public class KryoSerializer implements Serializer {
 
     private static final ThreadLocal<Kryo> KRYO_THREAD_LOCAL = ThreadLocal.withInitial(() -> {
         Kryo kryo = new Kryo();

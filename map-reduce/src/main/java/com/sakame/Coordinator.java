@@ -33,20 +33,20 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Coordinator 类
+ *
  * @author sakame
  * @version 1.0
  */
 public class Coordinator implements CoordinatorService {
-    private static volatile CoordinatorStatus status = new CoordinatorStatus();
-
     private static final String GLOBAL_DIR = System.getProperty("user.dir") + "\\map-reduce\\tmp";
+    private static volatile CoordinatorStatus status = new CoordinatorStatus();
 
     public static void main(String[] args) {
         String userDir = System.getProperty("user.dir");
         String path = userDir + "\\map-reduce\\src\\main\\resources\\";
         List<String> fileList = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(Paths.get(path), "pg-*.txt")) {
-            for (Path file: stream) {
+            for (Path file : stream) {
                 fileList.add(file.getParent().toString() + File.separator + file.getFileName().toString());
             }
             Coordinator coordinator = makeCoordinator(fileList, 10);
@@ -60,7 +60,51 @@ public class Coordinator implements CoordinatorService {
     }
 
     /**
+     * 初始化 coordinator 状态
+     *
+     * @param files
+     * @param nReduce
+     */
+    private static void init(List<String> files, int nReduce) {
+        System.out.println("init coordinator");
+
+        System.out.println("make map tasks");
+        int n = files.size();
+        List<Task> tasks = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            Task task = new Task();
+            task.setTaskId(i);
+            task.setFiles(files);
+            task.setStatus(TaskStatus.IDLE);
+            tasks.add(task);
+        }
+
+        status.setTasks(tasks);
+        status.setStatus(MasterStatus.MAP_PHASE);
+        status.setNReduce(nReduce);
+        status.setMapCount(n);
+        status.setReentrantLock(new ReentrantLock());
+    }
+
+    /**
+     * 创建 Coordinator 实例
+     *
+     * @param files
+     * @param nReduce
+     * @return
+     */
+    public static Coordinator makeCoordinator(List<String> files, int nReduce) {
+        Coordinator c = new Coordinator();
+
+        init(files, nReduce);
+
+        c.server(c);
+        return c;
+    }
+
+    /**
      * rpc handler，获取任务（消费端调用）
+     *
      * @param getTaskRequest
      * @return
      */
@@ -122,6 +166,7 @@ public class Coordinator implements CoordinatorService {
 
     /**
      * rpc handler，提交完成任务（消费端调用）
+     *
      * @param finishTaskRequest
      * @return
      */
@@ -198,11 +243,12 @@ public class Coordinator implements CoordinatorService {
 
     /**
      * 检查是否所有 map 任务均完成
+     *
      * @return
      */
     public boolean isAllFinish() {
         List<Task> tasks = status.getTasks();
-        for (Task task: tasks) {
+        for (Task task : tasks) {
             if (task.getStatus() != TaskStatus.COMPLETED) {
                 return false;
             }
@@ -226,6 +272,7 @@ public class Coordinator implements CoordinatorService {
 
     /**
      * 查询是否所有的 worker 都已完成任务
+     *
      * @return
      */
     public boolean done() {
@@ -236,46 +283,5 @@ public class Coordinator implements CoordinatorService {
         }
         status.getReentrantLock().unlock();
         return false;
-    }
-
-    /**
-     * 初始化 coordinator 状态
-     * @param files
-     * @param nReduce
-     */
-    private static void init(List<String> files, int nReduce) {
-        System.out.println("init coordinator");
-
-        System.out.println("make map tasks");
-        int n = files.size();
-        List<Task> tasks = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
-            Task task = new Task();
-            task.setTaskId(i);
-            task.setFiles(files);
-            task.setStatus(TaskStatus.IDLE);
-            tasks.add(task);
-        }
-
-        status.setTasks(tasks);
-        status.setStatus(MasterStatus.MAP_PHASE);
-        status.setNReduce(nReduce);
-        status.setMapCount(n);
-        status.setReentrantLock(new ReentrantLock());
-    }
-
-    /**
-     * 创建 Coordinator 实例
-     * @param files
-     * @param nReduce
-     * @return
-     */
-    public static Coordinator makeCoordinator(List<String> files, int nReduce) {
-        Coordinator c = new Coordinator();
-
-        init(files, nReduce);
-
-        c.server(c);
-        return c;
     }
 }

@@ -1,13 +1,19 @@
 package com.sakame.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+
+import java.io.Serializable;
 
 /**
  * @author sakame
  * @version 1.0
  */
 @Data
-public class Entry {
+@AllArgsConstructor
+@NoArgsConstructor
+public class Entry implements Serializable {
 
     /**
      * 条目索引
@@ -17,7 +23,7 @@ public class Entry {
     /**
      * 条目对应的 term
      */
-    private int term = 0;
+    private int term = -1;
 
     /**
      * 条目对应的命令

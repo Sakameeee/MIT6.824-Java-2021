@@ -19,34 +19,30 @@ import java.util.stream.Collectors;
 
 /**
  * Etcd 实现服务注册中心
+ *
  * @author sakame
  * @version 1.0
  */
-public class EtcdRegistry implements Registry{
-
-    private Client client;
-
-    private KV kvClient;
+public class EtcdRegistry implements Registry {
 
     /**
      * 服务端已注册服务的 key (服务端维护)
      */
     private static final Set<String> localRegisterNodeKeySet = new HashSet<>();
-
-    /**
-     * 要监听的服务键
-     */
-    private final Set<String> watchingKeySet = new ConcurrentHashSet<>();
-
-    /**
-     * 已注册服务缓存，(消费端维护)，服务名:版本号 => 服务节点列表
-     */
-    private final Map<String, List<ServiceMetaInfo>> registryServiceCache = new HashMap<>();
-
     /**
      * 存储的根目录
      */
     private static final String ETCD_ROOT_PATH = "/rpc/";
+    /**
+     * 要监听的服务键
+     */
+    private final Set<String> watchingKeySet = new ConcurrentHashSet<>();
+    /**
+     * 已注册服务缓存，(消费端维护)，服务名:版本号 => 服务节点列表
+     */
+    private final Map<String, List<ServiceMetaInfo>> registryServiceCache = new HashMap<>();
+    private Client client;
+    private KV kvClient;
 
     @Override
     public void init(RegistryConfig registryConfig) {
@@ -100,8 +96,8 @@ public class EtcdRegistry implements Registry{
                     .isPrefix(true)
                     .build();
             List<KeyValue> keyValues = kvClient.get(
-                    ByteSequence.from(searchPrefix, StandardCharsets.UTF_8),
-                    getOption)
+                            ByteSequence.from(searchPrefix, StandardCharsets.UTF_8),
+                            getOption)
                     .get()
                     .getKvs();
 
@@ -169,6 +165,7 @@ public class EtcdRegistry implements Registry{
 
     /**
      * 监听单个服务节点而非整个服务列表（消费者）
+     *
      * @param registryKey
      */
     @Override

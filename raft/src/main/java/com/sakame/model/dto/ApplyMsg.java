@@ -5,6 +5,8 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
+ * 用于 application 从 raft 读取信息
+ *
  * @author sakame
  * @version 1.0
  */
@@ -25,6 +27,11 @@ public class ApplyMsg implements Serializable {
      * 指令索引
      */
     private int commandIndex;
+
+    /**
+     * 指令索引对应的 term
+     */
+    private int commandTerm;
 
     private boolean snapShotValid;
 

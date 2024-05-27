@@ -9,12 +9,14 @@ import java.util.regex.Pattern;
 
 /**
  * 计算单词出现次数
+ *
  * @author sakame
  * @version 1.0
  */
 public class WordCount {
     /**
      * map function
+     *
      * @param fileName
      * @param contents
      * @return
@@ -33,13 +35,14 @@ public class WordCount {
 
     /**
      * reduce function
+     *
      * @param key
      * @param values
      * @return
      */
     public String reduce(String key, List<String> values) {
         int result = 0;
-        for (String value: values) {
+        for (String value : values) {
             result += Integer.parseInt(value);
         }
         return String.valueOf(result);

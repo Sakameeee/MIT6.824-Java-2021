@@ -7,6 +7,7 @@ package com.sakame.server;
 public interface HttpServer {
     /**
      * 启动一个 http 服务器
+     *
      * @param port
      */
     void doStart(int port);

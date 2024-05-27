@@ -6,6 +6,7 @@ import java.io.Serializable;
 
 /**
  * 投票请求
+ *
  * @author sakame
  * @version 1.0
  */
