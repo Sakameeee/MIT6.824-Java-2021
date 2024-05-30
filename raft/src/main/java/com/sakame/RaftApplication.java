@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.locks.Lock;
 
 /**
  * @author sakame
@@ -30,6 +31,8 @@ public class RaftApplication {
     private Registry registry;
 
     private Random random = new Random();
+
+    private static final int SNAPSHOT_INTERVAL = 10;
 
     /**
      * 初始化 raft 应用，击中管理所有 raft 并提供相关操作方法
@@ -89,15 +92,6 @@ public class RaftApplication {
     }
 
     /**
-     * 关闭某一个 raft
-     *
-     * @param i
-     */
-    public void shutdown(int i) {
-
-    }
-
-    /**
      * application 自己维护一个 logs map 数组而不直接访问 raft 的 logs
      * 通过多线程读取 raft 通道已提交日志信息来更新 logs
      *
@@ -105,7 +99,7 @@ public class RaftApplication {
      * @param channel
      */
     public void applier(int i, Channel<ApplyMsg> channel) {
-        while (true) {
+        while (config.getConnected()[i]) {
             // 循环读，有数据则更新，无数据则等待
             ApplyMsg applyMsg = channel.readOne();
             if (applyMsg.isCommandValid()) {
@@ -164,7 +158,7 @@ public class RaftApplication {
             Raft[] rafts = config.getRafts();
             Map<Integer, List<Integer>> leaders = new HashMap<>();
             for (int j = 0; j < config.getRaftCount(); j++) {
-                if (!rafts[j].killed() && rafts[j].isLeader()) {
+                if (rafts[j] != null && !rafts[j].killed() && rafts[j].isLeader()) {
                     if (!leaders.containsKey(rafts[j].getTerm())) {
                         leaders.put(rafts[j].getTerm(), new ArrayList<>());
                     }
@@ -256,9 +250,10 @@ public class RaftApplication {
      */
     public Object wait(int index, int n, int startTerm) {
         int to = 10;
+        Object[] objects = new Object[2];
         for (int i = 0; i < 30; i++) {
-            int cnt = (int) nCommitted(index)[0];
-            if (cnt >= n) {
+            objects = nCommitted(index);
+            if ((int) objects[0] >= n) {
                 break;
             }
             try {
@@ -277,7 +272,6 @@ public class RaftApplication {
                 }
             }
         }
-        Object[] objects = nCommitted(index);
         if ((int) objects[0] < n) {
             log.error("only {} decided for index {}; wanted {}", objects[0], index, n);
         }
@@ -294,11 +288,11 @@ public class RaftApplication {
      */
     public int one(Object cmd, int expectedServers, boolean retry) {
         LocalDateTime time1 = LocalDateTime.now().plus(Duration.ofSeconds(10));
+        int index = -1;
         while (LocalDateTime.now().isBefore(time1)) {
-            int index = -1;
             int n = config.getRaftCount();
             // 遍历每一个 raft 新增一个日志
-            for (int i = 0; i < n; i++) {
+            for (int i = 0; i < n && index == -1; i++) {
                 config.getLock().lock();
                 if (config.getConnected()[i]) {
                     int index1 = config.getRafts()[i].startCmd(cmd);
@@ -345,14 +339,20 @@ public class RaftApplication {
     }
 
     /**
-     * 选择一个 raft 注册到注册中心
+     * 重连 raft, raft 没有被销毁
+     * 1.connected = true
+     * 2.重启监听 apply 线程
+     * 3.启动服务器
+     * 4.重启 raft,不需要持久化恢复,crash 之后 init raft 需要
      *
      * @param i
      */
     public void connect(int i) {
         if (!config.getConnected()[i]) {
             log.info("connect raft:{}", i);
+            Channel<ApplyMsg> channel = new Channel<>();
             config.getConnected()[i] = true;
+            new Thread(() -> applier(i, channel)).start();
             config.getServers()[i].doStart(config.getServices()[i].getServicePort());
             config.getRafts()[i].restart();
         }
@@ -360,6 +360,9 @@ public class RaftApplication {
 
     /**
      * 选择一个 raft 断开连接
+     * 1.connected = false
+     * 2.关闭 http 服务器
+     * 3.执行 raft 的 kill 函数
      *
      * @param i
      */
@@ -390,15 +393,36 @@ public class RaftApplication {
     }
 
     /**
-     * 关闭一台 raft
+     * crash 对应 startOne
+     * disconnect 对应 connect
+     * 1.disconnect
+     * 2.raft = null
+     * 3.重置 persister
      *
      * @param i
      */
     public void crash(int i) {
-        if (config.getConnected()[i]) {
-            disconnect(i);
-            config.getRafts()[i].kill();
+        disconnect(i);
+
+        config.getLock().lock();
+
+        if (config.getSaved()[i] != null) {
+            config.getSaved()[i] = config.getSaved()[i].clone();
         }
+
+        Raft raft = config.getRafts()[i];
+        if (raft != null) {
+            config.getRafts()[i] = null;
+        }
+
+        if (config.getSaved()[i] != null) {
+            byte[] raftState = config.getSaved()[i].readRaftState();
+            byte[] snapshot = config.getSaved()[i].readSnapshot();
+            config.getSaved()[i] = new Persister();
+            config.getSaved()[i].saveRaftStateAndSnapshot(raftState, snapshot);
+        }
+
+        config.getLock().unlock();
     }
 
     /**
@@ -446,6 +470,36 @@ public class RaftApplication {
     }
 
     /**
+     * 恢复 crash 的 raft
+     * 和 connect 不同的是调用这个函数要求 raft 非正常退出，raft == null
+     *
+     * @param i
+     * @param snapshot
+     */
+    public void startOne(int i, boolean snapshot) {
+        if (!config.getConnected()[i]) {
+            startServer(i);
+            startRaft(i, false);
+        }
+    }
+
+    /**
+     * Maximum log size across all servers
+     *
+     * @return
+     */
+    public int logSize() {
+        int logsize = 0;
+        for (int i = 0; i < config.getRaftCount(); i++) {
+            int n = config.getSaved()[i].raftStateSize();
+            if (n > logsize) {
+                logsize = n;
+            }
+        }
+        return logsize;
+    }
+
+    /**
      * 获取某一个 raft
      *
      * @param i
@@ -453,6 +507,10 @@ public class RaftApplication {
      */
     public Raft getRaft(int i) {
         return config.getRafts()[i];
+    }
+
+    public Lock getLock() {
+        return config.getLock();
     }
 
 }

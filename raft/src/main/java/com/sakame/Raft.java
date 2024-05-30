@@ -51,7 +51,8 @@ public class Raft implements RaftService {
         state.setChannel(channel);
         resetElectionTimer();
         resetHeartbeatTimer();
-//        System.out.println(state.getMe() + state.getElectionTimer().);
+
+        readPersist();
 //        Entry lastLog = this.getLastLog();
 
 //        for (int i = 0; i < n; i++) {
@@ -171,7 +172,7 @@ public class Raft implements RaftService {
             // catch up quickly
             for (int i = index; i >= 1; i--) {
                 if (logs[i - 1].getTerm() != response.getConflictTerm()) {
-                    response.setConflictTerm(i);
+                    response.setConflictTerm(logs[i].getTerm());
                     break;
                 }
             }
@@ -266,7 +267,6 @@ public class Raft implements RaftService {
             }
         }
 
-        state.setCurrentTerm(state.getCurrentTerm() - 1);
         log.info("raft:{}'s current term:{}", state.getMe(), state.getCurrentTerm());
     }
 
@@ -335,7 +335,7 @@ public class Raft implements RaftService {
         if (response == null) {
             return;
         }
-        System.out.println(response);
+        System.out.println("raft:" + server + response);
 
         state.getLock().lock();
         // 检查 leader 状态
@@ -427,6 +427,8 @@ public class Raft implements RaftService {
                         doElection();
                         resetElectionTimer();
                     }
+                    break;
+                default:
                     break;
             }
             state.getLock().unlock();
@@ -745,18 +747,18 @@ public class Raft implements RaftService {
     /**
      * 持久化恢复
      *
-     * @param data
+     * @param
      */
-    public void readPersist(byte[] data) {
-
+    public void readPersist() {
+        state.getPersister().readPersist(state);
     }
 
     /**
-     * 持久化
+     * 持久化,在持有锁的时候调用，所以不用加锁
      * 当 log，votedFor，term 发生变化时调用
      */
     public void persist() {
-
+        state.getPersister().persist(state);
     }
 
     /**
@@ -796,8 +798,8 @@ public class Raft implements RaftService {
 
         int index = getLastLog().getIndex() + 1;
         state.setLogs(ArrayUtil.append(state.getLogs(), new Entry(index, state.getCurrentTerm(), cmd)));
-        state.getLock().unlock();
         persist();
+        state.getLock().unlock();
 
         log.info("raft:{}: appends a cmd:{}, lastLogIndex:{}", state.getMe(), cmd, getLastLog().getIndex());
         if (!killed()) {
@@ -821,6 +823,7 @@ public class Raft implements RaftService {
         trunTo(RaftConstant.FOLLOWER);
         resetElectionTimer();
         new Thread(this::ticker).start();
+        new Thread(this::applier).start();
     }
 
     public boolean killed() {

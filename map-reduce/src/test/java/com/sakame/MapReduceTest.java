@@ -1,8 +1,8 @@
 package com.sakame;
 
 import com.sakame.model.KeyValue;
-import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -56,6 +56,6 @@ public class MapReduceTest {
         bufferedReader.close();
         fileReader.close();
 
-        Assert.assertArrayEquals(list1.toArray(), list2.toArray());
+        Assertions.assertArrayEquals(list1.toArray(), list2.toArray());
     }
 }

@@ -16,6 +16,8 @@ public class VertxHttpServer implements HttpServer {
 
     private Object instance;
 
+    Vertx vertx;
+
     private io.vertx.core.http.HttpServer httpServer;
 
     public VertxHttpServer(Object o) {
@@ -24,7 +26,7 @@ public class VertxHttpServer implements HttpServer {
 
     @Override
     public void doStart(int port) {
-        Vertx vertx = Vertx.vertx();
+        vertx = Vertx.vertx();
 
         httpServer = vertx.createHttpServer(new HttpServerOptions());
 
@@ -49,5 +51,6 @@ public class VertxHttpServer implements HttpServer {
             return;
         }
         httpServer.close();
+        vertx.close();
     }
 }

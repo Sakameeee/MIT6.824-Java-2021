@@ -1,5 +1,6 @@
 package com.sakame;
 
+import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ArrayUtil;
 import com.sakame.model.Channel;
 import lombok.extern.slf4j.Slf4j;
@@ -7,11 +8,14 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * @author sakame
@@ -19,6 +23,8 @@ import java.util.concurrent.ExecutionException;
  */
 @Slf4j
 class RaftTest {
+
+    private static final int MAXLOGSIZE = 2000;
 
     @Test
     @Order(1)
@@ -75,16 +81,17 @@ class RaftTest {
         application.connect(leader2);
         int leader5 = application.checkOneLeader();
 
-        application.cleanup();
         Assertions.assertNotEquals(-1, leader1);
         Assertions.assertEquals(leader2, leader3);
         Assertions.assertNotEquals(-1, leader4);
         Assertions.assertEquals(leader4, leader5);
+
+        application.cleanup();
     }
 
     @Test
     @Order(3)
-    void TestBasicAgree2B() throws InterruptedException {
+    void testBasicAgree2B() throws InterruptedException {
         int servers = 3;
         RaftApplication application = new RaftApplication();
         application.init(servers, false, false);
@@ -288,7 +295,7 @@ class RaftTest {
         // 再将第二任 leader 重连
         application.connect(leader1);
 
-        Thread.sleep(50);
+        Thread.sleep(100);
         // 判断日志是否正常更新
         Assertions.assertEquals(3, index);
         Object[] objects = application.nCommitted(index);
@@ -376,5 +383,274 @@ class RaftTest {
 
         application.cleanup();
     }
+
+    @Test
+    @Order(9)
+    void testFigure82C() throws InterruptedException {
+        int servers = 5;
+        RaftApplication application = new RaftApplication();
+        application.init(servers, false, false);
+        log.info("Test (2B): leader backs up quickly over incorrect follower logs");
+
+        Thread.sleep(50);
+        Random random = new Random();
+        application.one(random.nextInt(100), servers, true);
+
+        // 模拟 raft 不断崩溃的情况下，重启持久化恢复是否成功以及日志的提交是否正常
+        int count = servers;
+        for (int i = 0; i < 1000; i++) {
+            int leader = -1;
+            for (int j = 0; j < servers; j++) {
+                if (application.getRaft(j) != null) {
+                    int started = application.getRaft(j).startCmd(random.nextInt(100));
+                    if (started != -1) {
+                        leader = j;
+                    }
+                }
+            }
+
+            Thread.sleep(50);
+
+            if (leader != -1) {
+                application.crash(leader);
+                count -= 1;
+            }
+            if (count < 3) {
+                for (int j = 0; j < servers; j++) {
+                    if (application.getRaft(j) == null && leader != j) {
+                        application.startOne(j, false);
+                        count += 1;
+                        break;
+                    }
+                }
+            }
+            Thread.sleep(1000);
+        }
+
+        for (int i = 0; i < servers; i++) {
+            application.startOne(i, false);
+        }
+
+        Thread.sleep(100);
+
+        int index = application.one(random.nextInt(100), servers, true);
+        Assertions.assertEquals(1002, index);
+
+        application.cleanup();
+    }
+
+    @Test
+    @Order(10)
+    void testReliableChurn2C() throws InterruptedException {
+        int servers = 5;
+        RaftApplication application = new RaftApplication();
+        application.init(servers, false, false);
+        log.info("Test (2C): churn");
+
+        Thread.sleep(50);
+        AtomicInteger stop = new AtomicInteger(0);
+        Random random = new Random();
+
+        // 创建三个并发线程不断写入命令，直到 stop 置 1
+        int ncli = 3;
+        Channel<List<Integer>> channel[] = new Channel[ncli];
+        for (int i = 0; i < ncli; i++) {
+            channel[i] = new Channel<>();
+            final int me = i;
+            final Channel<List<Integer>> chan = channel[i];
+            // create concurrent clients
+            new Thread(() -> {
+                List<Integer> values = new ArrayList<>();
+                while (stop.get() == 0) {
+                    int x = random.nextInt(100);
+                    int index = -1;
+                    boolean ok = false;
+                    for (int j = 0; j < servers; j++) {
+                        application.getLock().lock();
+                        Raft raft = application.getRaft(j);
+                        application.getLock().unlock();
+                        if (raft != null) {
+                            int started = raft.startCmd(x);
+                            if (started != -1) {
+                                ok = true;
+                                index = started;
+                            }
+                        }
+                    }
+                    if (ok) {
+                        Long[] to = new Long[]{10L, 20L, 50L, 100L, 200L};
+                        for (int j = 0; j < to.length; j++) {
+                            Object[] objects = application.nCommitted(index);
+                            if ((int) objects[0] > 0) {
+                                if ((int) objects[1] == x) {
+                                    values.add(x);
+                                    break;
+                                }
+                            }
+                            try {
+                                Thread.sleep(to[j]);
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        }
+                    } else {
+                        try {
+                            Thread.sleep(79 + me * 17);
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                    }
+                }
+                chan.writeOne(values);
+            }).start();
+        }
+
+        // 随机选择 disconnect，startOne，crash
+        for (int iters = 0; iters < 20; iters++) {
+            if (random.nextInt(Integer.MAX_VALUE) % 1000 < 200) {
+                int i = random.nextInt(Integer.MAX_VALUE) % servers;
+                application.disconnect(i);
+            }
+
+            if (random.nextInt(Integer.MAX_VALUE) % 1000 < 500) {
+                int i = random.nextInt(Integer.MAX_VALUE) % servers;
+                if (application.getRaft(i) == null) {
+                    application.startOne(i, false);
+                }
+                application.connect(i);
+            }
+
+            if (random.nextInt(Integer.MAX_VALUE) % 1000 < 200) {
+                int i = random.nextInt(Integer.MAX_VALUE) % servers;
+                if (application.getRaft(i) != null) {
+                    application.crash(i);
+                }
+            }
+
+            Thread.sleep(200);
+        }
+
+        // 恢复所有 raft
+        for (int i = 0; i < servers; i++) {
+            if (application.getRaft(i) == null) {
+                application.startOne(i, false);
+            }
+            application.connect(i);
+        }
+
+        stop.set(1);
+        Thread.sleep(1000);
+
+        // 读取三个线程分别写入的指令集并合并到 values 中
+        int[] values = new int[0];
+        for (int i = 0; i < ncli; i++) {
+            List<Integer> read = channel[i].readOne();
+            if (CollectionUtil.isEmpty(read)) {
+                log.error("client failed");
+            }
+            int n = values.length + read.size();
+            int[] tmp = new int[n];
+            System.arraycopy(values, 0, tmp, 0, values.length);
+            for (int j = values.length; j < n; j++) {
+                tmp[j] = read.get(j - values.length);
+            }
+            values = tmp;
+        }
+
+        int index = application.one(random.nextInt(100), servers, true) - 1;
+        int[] really = new int[index - 1];
+        for (int i = 0; i < index - 1; i++) {
+            int cmd = (int) application.wait(i + 1, 0, -1);
+            really[i] = cmd;
+        }
+
+        for (int x : values) {
+            Assertions.assertTrue(Arrays.stream(really).anyMatch(y -> y == x));
+        }
+
+        application.cleanup();
+    }
+
+    void snapCommon(String name, boolean disconnect, boolean reliable, boolean crash) throws InterruptedException {
+        int iters = 30;
+        int servers = 3;
+        RaftApplication application = new RaftApplication();
+        application.init(servers, !reliable, true);
+        log.info(name);
+
+        Thread.sleep(50);
+        Random random = new Random();
+        application.one(random.nextInt(100), servers, true);
+        int leader = application.checkOneLeader();
+
+        for (int i = 0; i < iters; i++) {
+            int victim = (leader + 1) % servers;
+            int sender = leader;
+            if (i % 3 == 1) {
+                sender = (leader + 1) % servers;
+                victim = leader;
+            }
+
+            if (disconnect) {
+                application.disconnect(victim);
+                application.one(random.nextInt(100), servers - 1, true);
+            }
+
+            if (crash) {
+                application.crash(i);
+                application.one(random.nextInt(100), servers - 1, true);
+            }
+
+            for (int j = 0; j < 11; j++) {
+                application.getRaft(j).startCmd(random.nextInt(100));
+            }
+            application.one(random.nextInt(100), servers - 1, true);
+
+            if (application.logSize() >= MAXLOGSIZE) {
+                log.error("log size too large");
+            }
+
+            if (disconnect) {
+                application.connect(victim);
+                application.one(random.nextInt(100), servers, true);
+                leader = application.checkOneLeader();
+            }
+
+            if (crash) {
+                application.startOne(victim, true);
+                application.connect(victim);
+                application.one(random.nextInt(100), servers, true);
+                leader = application.checkOneLeader();
+            }
+        }
+
+        application.cleanup();
+    }
+
+//    @Test
+//    void testSnapshotBasic2D() throws InterruptedException {
+//        snapCommon("Test (2D): snapshots basic", false, true, false);
+//    }
+//
+//    @Test
+//    void testSnapshotInstall2D() throws InterruptedException {
+//        snapCommon("Test (2D): install snapshots (disconnect)", true, true, false);
+//    }
+//
+//    @Test
+//    void testSnapshotInstallUnreliable2D() throws InterruptedException {
+//        snapCommon("Test (2D): install snapshots (disconnect+unreliable)",
+//                true, false, false);
+//    }
+//
+//    @Test
+//    void testSnapshotInstallCrash2D() throws InterruptedException {
+//        snapCommon("Test (2D): install snapshots (crash)", false, true, true);
+//    }
+//
+//    @Test
+//    void testSnapshotInstallUnCrash2D() throws InterruptedException {
+//        snapCommon("Test (2D): install snapshots (unreliable+crash)", false, false, true);
+//    }
 
 }
