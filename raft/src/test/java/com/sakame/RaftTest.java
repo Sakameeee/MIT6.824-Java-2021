@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Order;
 import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -447,7 +446,7 @@ class RaftTest {
         application.init(servers, false, false);
         log.info("Test (2C): churn");
 
-        Thread.sleep(50);
+        Thread.sleep(100);
         AtomicInteger stop = new AtomicInteger(0);
         Random random = new Random();
 
@@ -530,6 +529,8 @@ class RaftTest {
             Thread.sleep(200);
         }
 
+        Thread.sleep(500);
+
         // 恢复所有 raft
         for (int i = 0; i < servers; i++) {
             if (application.getRaft(i) == null) {
@@ -539,7 +540,6 @@ class RaftTest {
         }
 
         stop.set(1);
-        Thread.sleep(1000);
 
         // 读取三个线程分别写入的指令集并合并到 values 中
         int[] values = new int[0];
@@ -557,10 +557,12 @@ class RaftTest {
             values = tmp;
         }
 
-        int index = application.one(random.nextInt(100), servers, true) - 1;
+        Thread.sleep(500);
+
+        int index = application.one(random.nextInt(100), servers, true);
         int[] really = new int[index - 1];
         for (int i = 0; i < index - 1; i++) {
-            int cmd = (int) application.wait(i + 1, 0, -1);
+            int cmd = (int) application.wait(i + 1, servers, -1);
             really[i] = cmd;
         }
 
@@ -586,7 +588,7 @@ class RaftTest {
         for (int i = 0; i < iters; i++) {
             int victim = (leader + 1) % servers;
             int sender = leader;
-            if (i % 3 == 1) {
+            if (i % servers == 1) {
                 sender = (leader + 1) % servers;
                 victim = leader;
             }

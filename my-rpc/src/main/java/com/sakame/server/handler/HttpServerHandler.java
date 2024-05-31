@@ -32,7 +32,7 @@ public class HttpServerHandler implements Handler<HttpServerRequest> {
         final Serializer serializer = SerializerFactory.getInstance(RpcConfig.getRpcConfig().getSerializer());
 
         // 记录日志
-        System.out.println("Received request:" + httpServerRequest.method() + " " + httpServerRequest.uri());
+//        System.out.println("Received request:" + httpServerRequest.method() + " " + httpServerRequest.uri());
 
         // 异步处理 http 请求
         httpServerRequest.bodyHandler(body -> {

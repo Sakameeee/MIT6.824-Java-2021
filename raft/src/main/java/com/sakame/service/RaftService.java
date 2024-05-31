@@ -1,9 +1,6 @@
 package com.sakame.service;
 
-import com.sakame.model.dto.AppendEntriesRequest;
-import com.sakame.model.dto.AppendEntriesResponse;
-import com.sakame.model.dto.RequestVoteRequest;
-import com.sakame.model.dto.RequestVoteResponse;
+import com.sakame.model.dto.*;
 
 /**
  * 用于 rpc 服务调用的接口
@@ -33,5 +30,7 @@ public interface RaftService {
      * @return
      */
     AppendEntriesResponse requestAppendEntries(AppendEntriesRequest request);
+
+    InstallSnapshotResponse requestInstallSnapshot(InstallSnapshotRequest request);
 
 }

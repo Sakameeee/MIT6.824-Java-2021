@@ -48,7 +48,6 @@ public class Persister extends CloneSupport<Persister> {
     public byte[] genRaftStateBytes(RaftState raftState) {
         RaftStatePersist raftStatePersist = new RaftStatePersist();
         BeanUtil.copyProperties(raftState, raftStatePersist);
-        System.out.println("raft:" + raftState.getMe() + " persisted " + raftStatePersist);
         try {
             return serializer.serialize(raftStatePersist);
         } catch (IOException e) {

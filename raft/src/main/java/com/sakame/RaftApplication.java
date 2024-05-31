@@ -128,11 +128,6 @@ public class RaftApplication {
         Object command = applyMsg.getCommand();
         int index = applyMsg.getCommandIndex();
         Map<Integer, Object>[] logs = config.getLogs();
-        for (int j = 0; j < logs.length; j++) {
-            if (command != null && i != j && !logs[j].getOrDefault(index, -1).equals(command)) {
-                log.warn("raft:{}:logs:{} != raft:{}:logs:{}", i, logs[i], j, logs[j]);
-            }
-        }
         boolean key = logs[i].containsKey(index - 1);
         logs[i].put(index, command);
         if (index > config.getMaxIndex()) {
@@ -349,12 +344,12 @@ public class RaftApplication {
      */
     public void connect(int i) {
         if (!config.getConnected()[i]) {
-            log.info("connect raft:{}", i);
+            log.info("connect raft {}", i);
             Channel<ApplyMsg> channel = new Channel<>();
             config.getConnected()[i] = true;
             new Thread(() -> applier(i, channel)).start();
             config.getServers()[i].doStart(config.getServices()[i].getServicePort());
-            config.getRafts()[i].restart();
+            config.getRafts()[i].restart(channel);
         }
     }
 
@@ -413,6 +408,7 @@ public class RaftApplication {
         Raft raft = config.getRafts()[i];
         if (raft != null) {
             config.getRafts()[i] = null;
+            log.info("raft {} crashed", i);
         }
 
         if (config.getSaved()[i] != null) {
@@ -478,8 +474,33 @@ public class RaftApplication {
      */
     public void startOne(int i, boolean snapshot) {
         if (!config.getConnected()[i]) {
-            startServer(i);
-            startRaft(i, false);
+            Channel<ApplyMsg> channel = new Channel<>();
+            config.getLock().lock();
+            config.getConnected()[i] = true;
+
+            if (config.getSaved()[i] == null) {
+                config.getSaved()[i] = new Persister();
+            }
+            ServiceMetaInfo[] services = config.getServices();
+
+            Raft raft = new Raft();
+            config.getRafts()[i] = raft;
+            VertxHttpServer server = new VertxHttpServer(raft);
+            raft.init(config.getPeers(), i, config.getSaved()[i], channel);
+            raft.resetElectionTimer();
+
+            if (snapshot) {
+                new Thread(() -> applierSnap(i, channel));
+            } else {
+                new Thread(() -> applier(i, channel)).start();
+            }
+
+            raft.resetElectionTimer();
+            server.doStart(services[i].getServicePort());
+            config.getServers()[i] = server;
+
+            config.getLock().unlock();
+            log.info("start raft {} from crashing", i);
         }
     }
 

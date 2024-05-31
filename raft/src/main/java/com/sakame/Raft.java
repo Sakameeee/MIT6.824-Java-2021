@@ -25,7 +25,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @Slf4j
 public class Raft implements RaftService {
 
-    private static final int ELECTION_TIMEOUT_MIN = 150;
+    private static final int ELECTION_TIMEOUT_MIN = 200;
     private static final int ELECTION_TIMEOUT_MAX = 400;
     private static final int HEARTBEAT_INTERVAL = 50;
     private final Random random = new Random();
@@ -158,12 +158,29 @@ public class Raft implements RaftService {
         resetElectionTimer();
         log.info("raft:{} resets electionTimer", state.getMe());
 
+        if (request.getPreLogIndex() < getFrontLog().getIndex()) {
+            response.setSucceeded(false);
+            response.setConflictTerm(-1);
+            response.setConflictIndex(getFrontLog().getIndex());
+            state.getLock().unlock();
+            return response;
+        }
+
+        if (request.getPreLogIndex() > getLastLog().getIndex()) {
+            response.setSucceeded(false);
+            response.setConflictTerm(-1);
+            response.setConflictIndex(getLastLog().getIndex());
+            state.getLock().unlock();
+            return response;
+        }
+
         // 如果 leader 发来的检查点位置的日志的 term 与自身相同索引位置的 term 不一致
         // 说明该 follower 的日志并非最新
         // 寻找最旧的冲突日志索引位置（term 相同，index 最小，设置 response 的 conflict 参数）
         int index = transfer(request.getPreLogIndex());
         Entry[] logs = state.getLogs();
-        log.info("raft:{}, preLogIndex:{}, transferIndex:{}, logs:{}", state.getMe(), request.getPreLogIndex(), index, logs);
+        log.info("raft:{}, preLogIndex:{}, transferIndex:{}, lastLog:{}", state.getMe(), request.getPreLogIndex(), index, getLastLog());
+        log.info("raft:{}, lastApplied:{}, commitIndex:{}", state.getMe(), state.getLastApplied(), state.getCommitIndex());
         if (index != -1 && logs[index].getTerm() != request.getPreLogTerm()) {
             log.info("raft:{}: a conflict occurred at index {}", state.getMe(), index);
             response.setSucceeded(false);
@@ -208,6 +225,56 @@ public class Raft implements RaftService {
         return response;
     }
 
+    @Override
+    public InstallSnapshotResponse requestInstallSnapshot(InstallSnapshotRequest request) {
+        return null;
+    }
+
+    /**
+     * 通过日期类和循环实现的伪计时器
+     * 处于 follower 状态并计时结束发起选举
+     * 处于 leader 状态并计时结束发起心跳
+     * 处于 candidate 状态(只会在一轮选举没选出 leader 的情况下触发)则重复选举
+     * 每一次选举完都会重置选举时间,每次一次心跳都会重置对方的选举时间,每一次投完票都会重置自己的选举时间
+     */
+    public void ticker() {
+        while (!killed()) {
+            state.getLock().lock();
+            switch (state.getState()) {
+                case RaftConstant.FOLLOWER:
+                    if (electionTimeout()) {
+                        trunTo(RaftConstant.CANDIDATE);
+                        log.info("raft:{} starts an election", state.getMe());
+                        doElection();
+                        resetElectionTimer();
+                    }
+                    break;
+                case RaftConstant.LEADER:
+                    if (heartbeatTimeout()) {
+                        doAppendEntries();
+                        resetHeartbeatTimer();
+                    }
+                    break;
+                case RaftConstant.CANDIDATE:
+                    if (electionTimeout()) {
+                        trunTo(RaftConstant.CANDIDATE);
+                        log.info("raft:{} starts a re-election", state.getMe());
+                        doElection();
+                        resetElectionTimer();
+                    }
+                    break;
+                default:
+                    break;
+            }
+            state.getLock().unlock();
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
     /**
      * 开启一轮选举
      */
@@ -231,8 +298,18 @@ public class Raft implements RaftService {
                 if (response == null) {
                     return 0;
                 }
+                System.out.println("raft:" + peer + response);
 
                 lock.lock();
+
+                if (response.getTerm() > state.getCurrentTerm()) {
+                    state.setCurrentTerm(response.getTerm());
+                    state.setVotedFor(-1);
+                    trunTo(RaftConstant.FOLLOWER);
+                    persist();
+                    lock.unlock();
+                    return 0;
+                }
 
                 if (response.getTerm() == state.getCurrentTerm() && state.getState() == RaftConstant.CANDIDATE) {
                     if (response.isVoteGranted()) {
@@ -363,20 +440,24 @@ public class Raft implements RaftService {
         }
 
         // 2.不成功则继续倒推 nextIndex，用于下一次发送复制请求
-        log.info("start finding next index");
-        for (int j = state.getNextIndex()[server] - 1; j >= 1; j--) {
-            Entry entry = getEntry(j);
-            if (entry == null || entry.getTerm() > response.getConflictTerm()) {
-                continue;
-            }
+        if (response.getConflictTerm() == -1) {
+            state.getNextIndex()[server] = response.getConflictIndex() + 1;
+        } else if (response.getConflictTerm() > 0) {
+            log.info("start finding next index");
+            for (int j = state.getNextIndex()[server] - 1; j >= 1; j--) {
+                Entry entry = getEntry(j);
+                if (entry == null || entry.getTerm() > response.getConflictTerm()) {
+                    continue;
+                }
 
-            if (entry.getTerm() == response.getConflictTerm()) {
-                state.getNextIndex()[server] = j + 1;
-                log.info("sets raft:{}'s nextIndex {}", server, state.getNextIndex()[server]);
-                break;
-            }
-            if (entry.getTerm() < response.getConflictTerm()) {
-                break;
+                if (entry.getTerm() == response.getConflictTerm()) {
+                    state.getNextIndex()[server] = j + 1;
+                    log.info("sets raft:{}'s nextIndex {}", server, state.getNextIndex()[server]);
+                    break;
+                }
+                if (entry.getTerm() < response.getConflictTerm()) {
+                    break;
+                }
             }
         }
 
@@ -396,57 +477,13 @@ public class Raft implements RaftService {
     }
 
     /**
-     * 通过日期类和循环实现的伪计时器
-     * 处于 follower 状态并计时结束发起选举
-     * 处于 leader 状态并计时结束发起心跳
-     * 处于 candidate 状态(只会在一轮选举没选出 leader 的情况下触发)则重复选举
-     * 每一次选举完都会重置选举时间,每次一次心跳都会重置对方的选举时间,每一次投完票都会重置自己的选举时间
-     */
-    public void ticker() {
-        while (!killed()) {
-            state.getLock().lock();
-            switch (state.getState()) {
-                case RaftConstant.FOLLOWER:
-                    if (electionTimeout()) {
-                        trunTo(RaftConstant.CANDIDATE);
-                        log.info("raft:{} starts an election", state.getMe());
-                        doElection();
-                        resetElectionTimer();
-                    }
-                    break;
-                case RaftConstant.LEADER:
-                    if (heartbeatTimeout()) {
-                        doAppendEntries();
-                        resetHeartbeatTimer();
-                    }
-                    break;
-                case RaftConstant.CANDIDATE:
-                    if (electionTimeout()) {
-                        trunTo(RaftConstant.CANDIDATE);
-                        log.info("raft:{} starts a re-election", state.getMe());
-                        doElection();
-                        resetElectionTimer();
-                    }
-                    break;
-                default:
-                    break;
-            }
-            state.getLock().unlock();
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-        }
-    }
-
-    /**
      * 多线程根据 killed 判断循环执行
      * 常态睡眠，当 raft 确认提交时会唤醒该线程
      * leader：检查到超过过半数 follower 复制成功则提交，更新 leaderCommit
      * follower：在 request 中检查到 leaderCommit 更新则提交
      */
     public void applier() {
+        log.info("raft {} restart applier, lastApplied {}, commitIndex {}", state.getMe(), state.getLastApplied(), state.getCommitIndex());
         while (!killed()) {
             state.getLock().lock();
             Entry[] entries = null;
@@ -485,6 +522,15 @@ public class Raft implements RaftService {
                 log.info("raft:{} applied {} to application", state.getMe(), entry);
             }
         }
+    }
+
+    /**
+     * 使用安装快照恢复的方式复制日志
+     *
+     * @param server
+     */
+    public void doInstallSnapshot(int server) {
+
     }
 
     /**
@@ -529,16 +575,24 @@ public class Raft implements RaftService {
      */
     public void heartbeat() {
         RaftService[] peers = state.getPeers();
-        for (int i = 0; i < peers.length; i++) {
-            if (i == state.getMe()) {
-                continue;
-            }
-            try {
-                final int server = i;
-                CompletableFuture.runAsync(() -> {
-                    peers[server].requestHeartbeat();
-                }).get();
-            } catch (Exception e) {
+        while (!killed()) {
+            if (state.getState() == RaftConstant.LEADER) {
+                if (heartbeatTimeout()) {
+                    for (int i = 0; i < peers.length; i++) {
+                        if (i == state.getMe()) {
+                            continue;
+                        }
+                        try {
+                            final int server = i;
+                            CompletableFuture.runAsync(() -> {
+                                peers[server].requestHeartbeat();
+                            }).get();
+                        } catch (Exception e) {
+                        }
+                    }
+                }
+            } else {
+                break;
             }
         }
     }
@@ -818,8 +872,9 @@ public class Raft implements RaftService {
     /**
      * restart a raft
      */
-    public void restart() {
+    public void restart(Channel<ApplyMsg> channel) {
         state.getDead().set(0);
+        state.setChannel(channel);
         trunTo(RaftConstant.FOLLOWER);
         resetElectionTimer();
         new Thread(this::ticker).start();
@@ -828,15 +883,6 @@ public class Raft implements RaftService {
 
     public boolean killed() {
         return state.getDead().get() == 1;
-    }
-
-    /**
-     * 使用安装快照恢复的方式复制日志
-     *
-     * @param server
-     */
-    public void doInstallSnapshot(int server) {
-
     }
 
     /**
