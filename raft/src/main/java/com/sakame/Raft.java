@@ -53,18 +53,6 @@ public class Raft implements RaftService {
         resetHeartbeatTimer();
 
         readPersist();
-//        Entry lastLog = this.getLastLog();
-
-//        for (int i = 0; i < n; i++) {
-//            state.getNextIndex()[i] = lastLog.getIndex() + 1;
-//            state.getMatchIndex()[i] = 0;
-//            if (i != me) {
-//                state.getReplicatorCond()[i] = state.getLock().newCondition();
-//                int finalI = i;
-//                // 开启状态复制线程
-//                new Thread(() -> replicator(finalI));
-//            }
-//        }
 
         // 开启计时线程
         new Thread(this::ticker).start();
@@ -96,7 +84,7 @@ public class Raft implements RaftService {
         if (request.getTerm() > state.getCurrentTerm()) {
             state.setCurrentTerm(request.getTerm());
             state.setVotedFor(-1);
-            trunTo(RaftConstant.FOLLOWER);
+            turnTo(RaftConstant.FOLLOWER);
         }
 
         if (state.getVotedFor() == -1 || state.getVotedFor() == request.getCandidateId()) {
@@ -131,8 +119,8 @@ public class Raft implements RaftService {
 
     @Override
     public AppendEntriesResponse requestAppendEntries(AppendEntriesRequest request) {
-        log.info("raft:{} receives appending request:{}", state.getMe(), request);
         state.getLock().lock();
+        log.info("raft:{} receives appending request:{}", state.getMe(), request);
         AppendEntriesResponse response = new AppendEntriesResponse();
 
         if (request.getTerm() < state.getCurrentTerm()) {
@@ -146,11 +134,11 @@ public class Raft implements RaftService {
         if (request.getTerm() > state.getCurrentTerm()) {
             state.setCurrentTerm(request.getTerm());
             state.setVotedFor(-1);
-            trunTo(RaftConstant.FOLLOWER);
+            turnTo(RaftConstant.FOLLOWER);
         }
 
         if (state.getState() != RaftConstant.FOLLOWER) {
-            trunTo(RaftConstant.FOLLOWER);
+            turnTo(RaftConstant.FOLLOWER);
         }
 
         response.setSucceeded(true);
@@ -158,6 +146,7 @@ public class Raft implements RaftService {
         resetElectionTimer();
         log.info("raft:{} resets electionTimer", state.getMe());
 
+        // 检查发来的日志是否过时
         if (request.getPreLogIndex() < getFrontLog().getIndex()) {
             response.setSucceeded(false);
             response.setConflictTerm(-1);
@@ -165,10 +154,10 @@ public class Raft implements RaftService {
             state.getLock().unlock();
             return response;
         }
-
+        // 检查自身的日志是否缺失
         if (request.getPreLogIndex() > getLastLog().getIndex()) {
             response.setSucceeded(false);
-            response.setConflictTerm(-1);
+            response.setConflictTerm(-2);
             response.setConflictIndex(getLastLog().getIndex());
             state.getLock().unlock();
             return response;
@@ -216,7 +205,7 @@ public class Raft implements RaftService {
             if (request.getLeaderCommit() > getLastLog().getIndex()) {
                 state.setCommitIndex(getLastLog().getIndex());
             }
-            log.info("raft:{} commit to index:{}(lastLogIndex:{})", state.getMe(), state.getCommitIndex(), getLastLog().getIndex());
+            log.info("raft:{} commit to index:{}(lastLogIndex:{}, lastApplied:{})", state.getMe(), state.getCommitIndex(), getLastLog().getIndex(), state.getLastApplied());
             state.getApplyCond().signal();
         }
 
@@ -227,7 +216,53 @@ public class Raft implements RaftService {
 
     @Override
     public InstallSnapshotResponse requestInstallSnapshot(InstallSnapshotRequest request) {
-        return null;
+        state.getLock().lock();
+        log.info("raft:{} receives install snapshot request:{}", state.getMe(), request);
+        InstallSnapshotResponse response = new InstallSnapshotResponse();
+
+        // 检查状态
+        if (request.getTerm() < state.getCurrentTerm()) {
+            response.setTerm(state.getCurrentTerm());
+            state.getLock().unlock();
+            return response;
+        }
+        if (request.getTerm() > state.getCurrentTerm()) {
+            state.setCurrentTerm(request.getTerm());
+            state.setVotedFor(-1);
+            persist();
+            state.getLock().unlock();
+            return response;
+        }
+        if (state.getState() != RaftConstant.FOLLOWER) {
+            turnTo(RaftConstant.FOLLOWER);
+        }
+
+        response.setTerm(state.getCurrentTerm());
+        resetElectionTimer();
+
+        if (request.getLastIncludedIndex() <= state.getCommitIndex()) {
+            log.info("snapshot from {} was too old", request.getLeaderId());
+            state.getLock().unlock();
+            return response;
+        }
+
+        // 告知 application，清空并更新日志的起点
+        try {
+            CompletableFuture.runAsync(() -> {
+                ApplyMsg applyMsg = new ApplyMsg();
+                applyMsg.setSnapShotValid(true);
+                applyMsg.setSnapShot(request.getData());
+                applyMsg.setSnapShotTerm(request.getLastIncludedTerm());
+                applyMsg.setSnapShotIndex(request.getLastIncludedIndex());
+                log.info("{} applied snapshot {} to application", state.getMe(), applyMsg);
+                state.getChannel().writeOne(applyMsg);
+            }).get();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
+        state.getLock().unlock();
+        return response;
     }
 
     /**
@@ -243,7 +278,7 @@ public class Raft implements RaftService {
             switch (state.getState()) {
                 case RaftConstant.FOLLOWER:
                     if (electionTimeout()) {
-                        trunTo(RaftConstant.CANDIDATE);
+                        turnTo(RaftConstant.CANDIDATE);
                         log.info("raft:{} starts an election", state.getMe());
                         doElection();
                         resetElectionTimer();
@@ -257,7 +292,7 @@ public class Raft implements RaftService {
                     break;
                 case RaftConstant.CANDIDATE:
                     if (electionTimeout()) {
-                        trunTo(RaftConstant.CANDIDATE);
+                        turnTo(RaftConstant.CANDIDATE);
                         log.info("raft:{} starts a re-election", state.getMe());
                         doElection();
                         resetElectionTimer();
@@ -305,7 +340,7 @@ public class Raft implements RaftService {
                 if (response.getTerm() > state.getCurrentTerm()) {
                     state.setCurrentTerm(response.getTerm());
                     state.setVotedFor(-1);
-                    trunTo(RaftConstant.FOLLOWER);
+                    turnTo(RaftConstant.FOLLOWER);
                     persist();
                     lock.unlock();
                     return 0;
@@ -318,7 +353,7 @@ public class Raft implements RaftService {
                     } else if (response.getTerm() > state.getCurrentTerm()) {
                         state.setCurrentTerm(response.getTerm());
                         state.setVotedFor(-1);
-                        trunTo(RaftConstant.FOLLOWER);
+                        turnTo(RaftConstant.FOLLOWER);
                         log.info("Node:{} finds a new leader:{} with term:{}", state.getMe(), request.getTerm(), state.getCurrentTerm());
                         persist();
                     }
@@ -348,7 +383,7 @@ public class Raft implements RaftService {
     }
 
     /**
-     * 开启追加日志
+     * 开启追加日志(leader 调用)
      */
     public void doAppendEntries() {
         for (int i = 0; i < state.getPeers().length; i++) {
@@ -357,6 +392,9 @@ public class Raft implements RaftService {
             }
 
             int server = i;
+            // 这种情况发生在 leader 生成快照之后，follower crash 并恢复，此时 follower 的第一个日志索引是旧的（可能被 leader 抛弃）
+            // 第一次可能会选择 appendTo，肯定会失败，更新 nextIndex 为被抛弃的
+            // 第二次则会选择 doInstallSnapshot，以快照的形式复制日志给 follower
             if (getFrontLog().getIndex() > state.getNextIndex()[i] - 1) {
                 // 恢复快照线程
                 new Thread(() -> doInstallSnapshot(server)).start();
@@ -365,10 +403,11 @@ public class Raft implements RaftService {
                 new Thread(() -> appendTo(server)).start();
             }
         }
+        log.info("nextIndex:{}, matchIndex:{}", state.getNextIndex(), state.getMatchIndex());
     }
 
     /**
-     * 使用日志追加的方式复制
+     * 使用日志追加的方式复制(leader 调用)
      *
      * @param server
      */
@@ -421,7 +460,7 @@ public class Raft implements RaftService {
             state.setCurrentTerm(response.getTerm());
             state.setVotedFor(-1);
             persist();
-            trunTo(RaftConstant.FOLLOWER);
+            turnTo(RaftConstant.FOLLOWER);
             state.getLock().unlock();
             return;
         }
@@ -434,15 +473,12 @@ public class Raft implements RaftService {
             state.getMatchIndex()[server] = request.getPreLogIndex() + entries.length;
             // 每有一次成功复制都去检查能否开始提交
             toCommit();
-            log.info("nextIndex:{}, matchIndex:{}", state.getNextIndex(), state.getMatchIndex());
             state.getLock().unlock();
             return;
         }
 
         // 2.不成功则继续倒推 nextIndex，用于下一次发送复制请求
-        if (response.getConflictTerm() == -1) {
-            state.getNextIndex()[server] = response.getConflictIndex() + 1;
-        } else if (response.getConflictTerm() > 0) {
+        if (response.getConflictTerm() > 0) {
             log.info("start finding next index");
             for (int j = state.getNextIndex()[server] - 1; j >= 1; j--) {
                 Entry entry = getEntry(j);
@@ -459,6 +495,8 @@ public class Raft implements RaftService {
                     break;
                 }
             }
+        } else {
+            state.getNextIndex()[server] = response.getConflictIndex() + 1;
         }
 
         if (state.getNextIndex()[server] < 1) {
@@ -468,12 +506,57 @@ public class Raft implements RaftService {
     }
 
     /**
-     * 复制机线程
-     *
-     * @param index
+     * 使用安装快照恢复的方式复制日志(在 leader 每次生成 snapshot 后仅调用一次)
+     * 仅更新 follower 的日志起点(先清空)，并更新 leader 维护的 nextIndex
+     * 后续的复制日志还是依靠 appendTo 函数
+     * @param server
      */
-    public void replicator(int index) {
+    public void doInstallSnapshot(int server) {
+        state.getLock().lock();
+        if (state.getState() != RaftConstant.LEADER) {
+            state.getLock().unlock();
+            log.info("raft{}'s status changed", state.getMe());
+            return;
+        }
 
+        // 以 leader 的 frontLog 为起点条目，persister 的 data 为起点条目的 cmd，仅使 follower 更新起点日志
+        byte[] data = state.getPersister().copy(state.getPersister().readSnapshot());
+        InstallSnapshotRequest request = new InstallSnapshotRequest();
+        request.setTerm(state.getCurrentTerm());
+        request.setLeaderId(state.getMe());
+        request.setLastIncludedIndex(getFrontLog().getIndex());
+        request.setLastIncludedTerm(getFrontLog().getTerm());
+        request.setData(data);
+        state.getLock().unlock();
+
+        InstallSnapshotResponse response = sendInstallSnapshot(server, request);
+        if (response == null) {
+            return;
+        }
+        System.out.println("raft:" + server + response);
+
+        state.getLock().lock();
+
+        // 检查状态
+        if (state.getCurrentTerm() != request.getTerm() || state.getState() != RaftConstant.LEADER || response.getTerm() < state.getCurrentTerm()) {
+            log.info("ignore old installSnapshotResponse from raft {}", server);
+            state.getLock().unlock();
+            return;
+        }
+        if (response.getTerm() > state.getCurrentTerm()) {
+            log.info("raft{}'s term is larger than {} ({} > {})", server, state.getMe(), response.getTerm(), state.getCurrentTerm());
+            state.setCurrentTerm(response.getTerm());
+            turnTo(RaftConstant.FOLLOWER);
+            persist();
+            state.getLock().unlock();
+            return;
+        }
+
+        // 更新 nextIndex，用于下一次 appendTo 正常复制日志
+        state.getNextIndex()[server] = request.getLastIncludedIndex() + 1;
+
+        log.info("{} sent snapshot to {} successfully", state.getMe(), server);
+        state.getLock().unlock();
     }
 
     /**
@@ -490,12 +573,13 @@ public class Raft implements RaftService {
             try {
                 while (state.getLastApplied() >= state.getCommitIndex()) {
                     state.getApplyCond().await();
+                    log.info("{} applier wake up, lastApplied {}, commitIndex {}", state.getMe(), state.getLastApplied(), state.getCommitIndex());
                 }
 
                 int lastApplied = transfer(state.getLastApplied());
                 int commitIndex = transfer(state.getCommitIndex());
                 // 把新应用提交的日志内容通过通道告知 application
-                entries = ArrayUtil.sub(state.getLogs(), lastApplied, commitIndex + 1);
+                entries = ArrayUtil.sub(state.getLogs(), lastApplied + 1, commitIndex + 1);
 
                 // 注意这里不能在提交日志给 application 之后再更新 lastApplied
                 // 因为提交过程是不上锁的，在这个过程中 commitIndex 的值可能发生改变，导致 application 丢失一部分日志
@@ -522,15 +606,6 @@ public class Raft implements RaftService {
                 log.info("raft:{} applied {} to application", state.getMe(), entry);
             }
         }
-    }
-
-    /**
-     * 使用安装快照恢复的方式复制日志
-     *
-     * @param server
-     */
-    public void doInstallSnapshot(int server) {
-
     }
 
     /**
@@ -565,6 +640,17 @@ public class Raft implements RaftService {
             response = peers[server].requestAppendEntries(request);
         } catch (Exception e) {
             log.warn(e.getMessage());
+            return null;
+        }
+        return response;
+    }
+
+    public InstallSnapshotResponse sendInstallSnapshot(int server, InstallSnapshotRequest request) {
+        RaftService[] peers = state.getPeers();
+        InstallSnapshotResponse response;
+        try {
+            response = peers[server].requestInstallSnapshot(request);
+        } catch (Exception e) {
             return null;
         }
         return response;
@@ -707,8 +793,8 @@ public class Raft implements RaftService {
             for (int j = 0; j < n; j++) {
                 if (j != state.getMe() && state.getMatchIndex()[j] >= i) {
                     cnt++;
+                    log.info("commit check; {} rafts commit to index {}", cnt, i);
                 }
-                log.info("commit check; {} rafts commit to index {}", cnt, i);
                 if (cnt > n / 2) {
                     state.setCommitIndex(i);
                     log.info("raft:{} commit to {}", state.getMe(), state.getCommitIndex());
@@ -718,7 +804,7 @@ public class Raft implements RaftService {
             }
         }
 
-        log.info("raft:{} doesn't have half replicated from {} to {} now", state.getMe(), state.getCommitIndex(), getLastLog().getIndex());
+        log.info("raft:{} doesn't have half replicated from commitIndex {} to lastLogIndex {} now", state.getMe(), state.getCommitIndex(), getLastLog().getIndex());
     }
 
     /**
@@ -755,7 +841,7 @@ public class Raft implements RaftService {
      *
      * @param turn
      */
-    public void trunTo(int turn) {
+    public void turnTo(int turn) {
         switch (turn) {
             case RaftConstant.LEADER:
                 leaderInit();
@@ -769,6 +855,134 @@ public class Raft implements RaftService {
             case RaftConstant.FOLLOWER:
                 state.setState(RaftConstant.FOLLOWER);
         }
+    }
+
+    /**
+     * 安装快照(由 application 调用，对象为 follower)
+     *
+     * @param lastIncludedTerm
+     * @param lastIncludedIndex
+     * @param snapshot
+     * @return
+     */
+    public boolean condInstallSnapshot(int lastIncludedTerm, int lastIncludedIndex, byte[] snapshot) {
+        state.getLock().lock();
+
+        log.info("{} condInstallSnapshot(lastIncludedIndex: {}, lastIncludedTerm: {}, lastApplied: {}, commitIndex: {})", state.getMe(), lastIncludedIndex, lastIncludedTerm, state.getLastApplied(), state.getCommitIndex());
+
+        if (lastIncludedIndex < state.getCommitIndex()) {
+            log.info("{} refused to install snapshot because index {} was too old", state.getMe(), lastIncludedIndex);
+            state.getLock().unlock();
+            return false;
+        }
+
+        if (lastIncludedIndex > getLastLog().getIndex()) {
+            // 1.日志落后，直接清空
+            state.setLogs(new Entry[]{new Entry()});
+        } else {
+            int index = transfer(lastIncludedIndex);
+            // 1.日志不落后，应用裁切
+            state.setLogs(ArrayUtil.sub(state.getLogs(), index, state.getLogs().length));
+        }
+
+        // 2.更新日志起点为裁切位置
+        state.getLogs()[0].setTerm(lastIncludedTerm);
+        state.getLogs()[0].setIndex(lastIncludedIndex);
+        state.getLogs()[0].setCommand(null);
+        // 3.持久化
+        persistSnapshot(snapshot);
+
+        // 4.状态检查
+        if (lastIncludedIndex > state.getLastApplied()) {
+            state.setLastApplied(lastIncludedIndex);
+        }
+        if (lastIncludedIndex > state.getCommitIndex()) {
+            state.setCommitIndex(lastIncludedIndex);
+        }
+
+        state.getLock().unlock();
+        return true;
+    }
+
+    /**
+     * 生成快照(由 application 周期性调用，对象为 leader)
+     *
+     * @param index
+     * @param snapshot
+     */
+    public void snapshot(int index, byte[] snapshot) {
+        state.getLock().lock();
+
+        log.info("{} called snapshot, index: {}", state.getMe(), index);
+
+        if (getFrontLog().getIndex() >= index) {
+            log.info("{} refused snapshot because index {} was not the latest one", state.getMe(), index);
+            state.getLock().unlock();
+            return;
+        }
+
+        int transfer = transfer(index);
+        if (transfer == -1) {
+            transfer = state.getLogs().length - 1;
+        }
+        // 在 index 位置裁切日志作为新的起点，并将对应的日志的命令设置为 null
+        state.setLogs(ArrayUtil.sub(state.getLogs(), transfer, state.getLogs().length));
+        state.getLogs()[0].setCommand(null);
+        persistSnapshot(snapshot);
+        log.info("raft: {} {} after snapshot", state.getMe(), state.getLogs());
+        state.getLock().unlock();
+    }
+
+    /**
+     * 在日志中新增一条日志，由 application(外部) 调用
+     * 只能给 leader 新增日志，然后由 leader 复制给其他机器(对外单机)
+     *
+     * @return 返回追加日志后最新的日志索引
+     */
+    public int startCmd(Object cmd) {
+        state.getLock().lock();
+        if (state.getState() != RaftConstant.LEADER) {
+            state.getLock().unlock();
+            return -1;
+        }
+
+        int index = getLastLog().getIndex() + 1;
+        state.setLogs(ArrayUtil.append(state.getLogs(), new Entry(index, state.getCurrentTerm(), cmd)));
+        persist();
+        state.getLock().unlock();
+
+        log.info("raft:{}: appends a cmd:{}, lastLogIndex:{}", state.getMe(), cmd, getLastLog().getIndex());
+        if (!killed()) {
+            doAppendEntries();
+        }
+        return index;
+    }
+
+    /**
+     * 持久化恢复
+     *
+     * @param
+     */
+    public void readPersist() {
+        state.getPersister().readPersist(state);
+        state.setLastApplied(getFrontLog().getIndex());
+        state.setCommitIndex(getFrontLog().getIndex());
+    }
+
+    /**
+     * 持久化,在持有锁的时候调用，所以不用加锁
+     * 当 log，votedFor，term 发生变化时调用
+     */
+    public void persist() {
+        state.getPersister().persist(state);
+    }
+
+    /**
+     * 持久化 snapshot 和 raft state
+     * @param snapshot
+     */
+    public void persistSnapshot(byte[] snapshot) {
+        state.getPersister().persistSnapshot(state, snapshot);
     }
 
     /**
@@ -799,70 +1013,6 @@ public class Raft implements RaftService {
     }
 
     /**
-     * 持久化恢复
-     *
-     * @param
-     */
-    public void readPersist() {
-        state.getPersister().readPersist(state);
-    }
-
-    /**
-     * 持久化,在持有锁的时候调用，所以不用加锁
-     * 当 log，votedFor，term 发生变化时调用
-     */
-    public void persist() {
-        state.getPersister().persist(state);
-    }
-
-    /**
-     * 安装快照
-     *
-     * @param lastIncludedTerm
-     * @param lastIncludedIndex
-     * @param snapshot
-     * @return
-     */
-    public boolean condInstallSnapshot(int lastIncludedTerm, int lastIncludedIndex, byte[] snapshot) {
-        return true;
-    }
-
-    /**
-     * 生成快照
-     *
-     * @param index
-     * @param snapshot
-     */
-    public void snapshot(int index, byte[] snapshot) {
-
-    }
-
-    /**
-     * 在日志中新增一条日志，由 application(外部) 调用
-     * 只能给 leader 新增日志，然后由 leader 复制给其他机器(对外单机)
-     *
-     * @return 返回追加日志后最新的日志索引
-     */
-    public int startCmd(Object cmd) {
-        state.getLock().lock();
-        if (state.getState() != RaftConstant.LEADER) {
-            state.getLock().unlock();
-            return -1;
-        }
-
-        int index = getLastLog().getIndex() + 1;
-        state.setLogs(ArrayUtil.append(state.getLogs(), new Entry(index, state.getCurrentTerm(), cmd)));
-        persist();
-        state.getLock().unlock();
-
-        log.info("raft:{}: appends a cmd:{}, lastLogIndex:{}", state.getMe(), cmd, getLastLog().getIndex());
-        if (!killed()) {
-            doAppendEntries();
-        }
-        return index;
-    }
-
-    /**
      * kill a raft
      */
     public void kill() {
@@ -875,7 +1025,7 @@ public class Raft implements RaftService {
     public void restart(Channel<ApplyMsg> channel) {
         state.getDead().set(0);
         state.setChannel(channel);
-        trunTo(RaftConstant.FOLLOWER);
+        turnTo(RaftConstant.FOLLOWER);
         resetElectionTimer();
         new Thread(this::ticker).start();
         new Thread(this::applier).start();

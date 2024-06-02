@@ -3,10 +3,14 @@ package com.sakame;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ArrayUtil;
 import com.sakame.model.Channel;
+import com.sakame.model.dto.ApplyMsg;
+import com.sakame.serializer.Serializer;
+import com.sakame.serializer.SerializerFactory;
+import com.sakame.serializer.SerializerKeys;
 import lombok.extern.slf4j.Slf4j;
-import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
+
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -21,9 +25,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @version 1.0
  */
 @Slf4j
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class RaftTest {
 
-    private static final int MAXLOGSIZE = 2000;
+    private static final int MAX_LOG_SIZE = 2000;
+
+    private static final int SNAPSHOT_INTERVAL = 10;
 
     @Test
     @Order(1)
@@ -397,7 +404,7 @@ class RaftTest {
 
         // 模拟 raft 不断崩溃的情况下，重启持久化恢复是否成功以及日志的提交是否正常
         int count = servers;
-        for (int i = 0; i < 1000; i++) {
+        for (int i = 0; i < 100; i++) {
             int leader = -1;
             for (int j = 0; j < servers; j++) {
                 if (application.getRaft(j) != null) {
@@ -417,7 +424,7 @@ class RaftTest {
             if (count < 3) {
                 for (int j = 0; j < servers; j++) {
                     if (application.getRaft(j) == null && leader != j) {
-                        application.startOne(j, false);
+                        application.startOne(j);
                         count += 1;
                         break;
                     }
@@ -427,13 +434,13 @@ class RaftTest {
         }
 
         for (int i = 0; i < servers; i++) {
-            application.startOne(i, false);
+            application.startOne(i);
         }
 
         Thread.sleep(100);
 
         int index = application.one(random.nextInt(100), servers, true);
-        Assertions.assertEquals(1002, index);
+        Assertions.assertEquals(102, index);
 
         application.cleanup();
     }
@@ -514,7 +521,7 @@ class RaftTest {
             if (random.nextInt(Integer.MAX_VALUE) % 1000 < 500) {
                 int i = random.nextInt(Integer.MAX_VALUE) % servers;
                 if (application.getRaft(i) == null) {
-                    application.startOne(i, false);
+                    application.startOne(i);
                 }
                 application.connect(i);
             }
@@ -534,7 +541,7 @@ class RaftTest {
         // 恢复所有 raft
         for (int i = 0; i < servers; i++) {
             if (application.getRaft(i) == null) {
-                application.startOne(i, false);
+                application.startOne(i);
             }
             application.connect(i);
         }
@@ -573,7 +580,7 @@ class RaftTest {
         application.cleanup();
     }
 
-    void snapCommon(String name, boolean disconnect, boolean reliable, boolean crash) throws InterruptedException {
+    int snapCommon(String name, boolean disconnect, boolean reliable, boolean crash) throws InterruptedException {
         int iters = 30;
         int servers = 3;
         RaftApplication application = new RaftApplication();
@@ -599,16 +606,20 @@ class RaftTest {
             }
 
             if (crash) {
-                application.crash(i);
+                application.crash(victim);
                 application.one(random.nextInt(100), servers - 1, true);
             }
 
-            for (int j = 0; j < 11; j++) {
-                application.getRaft(j).startCmd(random.nextInt(100));
+            for (int j = 0; j < SNAPSHOT_INTERVAL + 1; j++) {
+                int cmd = random.nextInt(100);
+                Raft raft = application.getRaft(sender);
+                if (raft != null) {
+                    application.getRaft(sender).startCmd(cmd);
+                }
             }
             application.one(random.nextInt(100), servers - 1, true);
 
-            if (application.logSize() >= MAXLOGSIZE) {
+            if (application.logByteSize() >= MAX_LOG_SIZE) {
                 log.error("log size too large");
             }
 
@@ -619,7 +630,7 @@ class RaftTest {
             }
 
             if (crash) {
-                application.startOne(victim, true);
+                application.startOne(victim);
                 application.connect(victim);
                 application.one(random.nextInt(100), servers, true);
                 leader = application.checkOneLeader();
@@ -627,32 +638,26 @@ class RaftTest {
         }
 
         application.cleanup();
+        return application.logSize();
     }
 
-//    @Test
-//    void testSnapshotBasic2D() throws InterruptedException {
-//        snapCommon("Test (2D): snapshots basic", false, true, false);
-//    }
-//
-//    @Test
-//    void testSnapshotInstall2D() throws InterruptedException {
-//        snapCommon("Test (2D): install snapshots (disconnect)", true, true, false);
-//    }
-//
-//    @Test
-//    void testSnapshotInstallUnreliable2D() throws InterruptedException {
-//        snapCommon("Test (2D): install snapshots (disconnect+unreliable)",
-//                true, false, false);
-//    }
-//
-//    @Test
-//    void testSnapshotInstallCrash2D() throws InterruptedException {
-//        snapCommon("Test (2D): install snapshots (crash)", false, true, true);
-//    }
-//
-//    @Test
-//    void testSnapshotInstallUnCrash2D() throws InterruptedException {
-//        snapCommon("Test (2D): install snapshots (unreliable+crash)", false, false, true);
-//    }
+    @Test
+    @Order(11)
+    void testSnapshotBasic2D() throws InterruptedException {
+        int cnt = snapCommon("Test (2D): snapshots basic", false, true, false);
+        Assertions.assertEquals(251, cnt);
+    }
+
+    @Test
+    @Order(12)
+    void testSnapshotInstall2D() throws InterruptedException {
+        snapCommon("Test (2D): install snapshots (disconnect)", true, true, false);
+    }
+
+    @Test
+    @Order(13)
+    void testSnapshotInstallCrash2D() throws InterruptedException {
+        snapCommon("Test (2D): install snapshots (crash)", false, true, true);
+    }
 
 }

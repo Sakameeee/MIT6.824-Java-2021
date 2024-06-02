@@ -23,12 +23,22 @@ public class Persister extends CloneSupport<Persister> {
 
     private static final Serializer serializer = SerializerFactory.getInstance(SerializerKeys.KRYO);
 
+    /**
+     * 存放 raft state 的部分属性
+     */
     private byte[] raftState;
 
+    /**
+     * 存放裁切位置对应的 cmd
+     */
     private byte[] snapshot;
 
     public void persist(RaftState raftState) {
         saveRaftState(genRaftStateBytes(raftState));
+    }
+
+    public void persistSnapshot(RaftState raftState, byte[] snapshot) {
+        saveRaftStateAndSnapshot(genRaftStateBytes(raftState), snapshot);
     }
 
     public void readPersist(RaftState raftState) {

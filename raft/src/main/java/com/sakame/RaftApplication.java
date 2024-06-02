@@ -10,10 +10,13 @@ import com.sakame.model.dto.ApplyMsg;
 import com.sakame.proxy.ServiceProxyFactory;
 import com.sakame.registry.Registry;
 import com.sakame.registry.RegistryFactory;
+import com.sakame.serializer.Serializer;
+import com.sakame.serializer.SerializerFactory;
+import com.sakame.serializer.SerializerKeys;
 import com.sakame.server.VertxHttpServer;
 import com.sakame.service.RaftService;
 import lombok.extern.slf4j.Slf4j;
-
+import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -29,6 +32,8 @@ public class RaftApplication {
     private RaftConfig config = RaftConfig.getInstance();
 
     private Registry registry;
+
+    private boolean snapshot;
 
     private Random random = new Random();
 
@@ -54,6 +59,7 @@ public class RaftApplication {
         ServiceMetaInfo[] services = config.getServices();
         RaftService[] peers = config.getPeers();
         Map<Integer, Object>[] logs = config.getLogs();
+        this.snapshot = snapshot;
         int port = 22222;
 
         // 1.初始化 serviceMetaInfo 并注册服务
@@ -87,7 +93,7 @@ public class RaftApplication {
 
         // 4.初始化 raft (开启其 ticker 线程)
         for (int i = 0; i < n; i++) {
-            startRaft(i, snapshot);
+            startRaft(i);
         }
     }
 
@@ -113,8 +119,55 @@ public class RaftApplication {
         }
     }
 
+    /**
+     * 周期性的生成 raft state 的快照
+     * 与 applier 互斥，在包含 applier 功能的基础上加入了 snapshot 的生成和解析
+     * @param i
+     * @param channel
+     */
     public void applierSnap(int i, Channel<ApplyMsg> channel) {
-
+        int lastApplied = 0;
+        final Serializer serializer = SerializerFactory.getInstance(SerializerKeys.KRYO);
+        while (config.getConnected()[i]) {
+            ApplyMsg applyMsg = channel.readOne();
+            if (applyMsg.isSnapShotValid()) {
+                config.getLock().lock();
+                // 1.raft 接收到 requestInstallSnapshot 请求不会第一时间清空日志
+                // 2.而是告知 application，application 清空自己维护的 log 并更新起点
+                // 3.由 application 调用 raft 对外暴露的接口(condInstallSnapshot)，间接修改 raft 的日志(即清空或裁切并更新起点)
+                // 4.一般情况下 leader 会进入下面的 if 分支生成快照，而 follower 会在 leader 生成快照之后接收到 requestInstallSnapshot 从而进入这个分支并调用 condInstallSnapshot
+                // 5.condInstallSnapshot 和 snapshot 效果一致都是更新提交日志后对快照持久化，区别在于调用者不同，以及 snapshot 的原数据来自 leader 的日志不为 null，而 condInstallSnapshot 的数据来源于 request，如果 follower 进入下面的分支会因为 cmd 为 null 而无法序列化
+                if (config.getRafts()[i].condInstallSnapshot(applyMsg.getSnapShotTerm(), applyMsg.getSnapShotIndex(), applyMsg.getSnapShot())) {
+                    config.getLogs()[i] = new HashMap<>();
+                    try {
+                        // todo:
+                        Integer o = serializer.deserialize(applyMsg.getSnapShot(), Integer.class);
+                        config.getLogs()[i].put(applyMsg.getSnapShotIndex(), o);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                config.getLock().unlock();
+            } else if (applyMsg.isCommandValid() && applyMsg.getCommandIndex() > lastApplied) {
+                config.getLock().lock();
+                // 正常提交日志
+                boolean result = checkLogs(i, applyMsg);
+                config.getLock().unlock();
+                if (applyMsg.getCommandIndex() > 1 && !result) {
+                    log.error("fail to apply message:{} to server:{}", applyMsg, i);
+                }
+                lastApplied = applyMsg.getCommandIndex();
+                // 提交的日志达到一定个数之后开始生成快照，告知 raft 生成快照裁切和位置和要持久化的命令
+                if ((applyMsg.getCommandIndex() + 1) % SNAPSHOT_INTERVAL == 0) {
+                    try {
+                        byte[] bytes = serializer.serialize(applyMsg.getCommand());
+                        config.getRafts()[i].snapshot(applyMsg.getCommandIndex(), bytes);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
     }
 
     /**
@@ -307,7 +360,7 @@ public class RaftApplication {
                     // 获取要求新增的日志有多少 raft 新增成功
                     int cnt = (int) nCommitted(index)[0];
                     Object cmd1 = nCommitted(index)[1];
-                    log.info("{} rafts applied cmd:{}", cnt, cmd1);
+                    log.info("{} rafts applied cmd:{}, index: {}", cnt, cmd1, index);
                     // 如果成功新增日志的 raft 的个数满足期望的值则返回结束
                     if (cnt >= expectedServers && cmd1.equals(cmd)) {
                         return index;
@@ -347,7 +400,11 @@ public class RaftApplication {
             log.info("connect raft {}", i);
             Channel<ApplyMsg> channel = new Channel<>();
             config.getConnected()[i] = true;
-            new Thread(() -> applier(i, channel)).start();
+            if (snapshot) {
+                new Thread(() -> applierSnap(i, channel)).start();
+            } else {
+                new Thread(() -> applier(i, channel)).start();
+            }
             config.getServers()[i].doStart(config.getServices()[i].getServicePort());
             config.getRafts()[i].restart(channel);
         }
@@ -448,9 +505,8 @@ public class RaftApplication {
      * 用于第一次启动一个 raft
      *
      * @param i
-     * @param snapshot
      */
-    public void startRaft(int i, boolean snapshot) {
+    public void startRaft(int i) {
         Channel<ApplyMsg> channel = new Channel<>();
         config.getLock().lock();
         config.getConnected()[i] = true;
@@ -458,7 +514,7 @@ public class RaftApplication {
         rafts[i].init(config.getPeers(), i, config.getSaved()[i], channel);
 
         if (snapshot) {
-            new Thread(() -> applierSnap(i, channel));
+            new Thread(() -> applierSnap(i, channel)).start();
         } else {
             new Thread(() -> applier(i, channel)).start();
         }
@@ -470,9 +526,8 @@ public class RaftApplication {
      * 和 connect 不同的是调用这个函数要求 raft 非正常退出，raft == null
      *
      * @param i
-     * @param snapshot
      */
-    public void startOne(int i, boolean snapshot) {
+    public void startOne(int i) {
         if (!config.getConnected()[i]) {
             Channel<ApplyMsg> channel = new Channel<>();
             config.getLock().lock();
@@ -490,7 +545,7 @@ public class RaftApplication {
             raft.resetElectionTimer();
 
             if (snapshot) {
-                new Thread(() -> applierSnap(i, channel));
+                new Thread(() -> applierSnap(i, channel)).start();
             } else {
                 new Thread(() -> applier(i, channel)).start();
             }
@@ -509,10 +564,25 @@ public class RaftApplication {
      *
      * @return
      */
-    public int logSize() {
+    public int logByteSize() {
         int logsize = 0;
         for (int i = 0; i < config.getRaftCount(); i++) {
             int n = config.getSaved()[i].raftStateSize();
+            if (n > logsize) {
+                logsize = n;
+            }
+        }
+        return logsize;
+    }
+
+    /**
+     * 获取 logs map 存储的日志数量
+     * @return
+     */
+    public int logSize() {
+        int logsize = 0;
+        for (int i = 0; i < config.getRaftCount(); i++) {
+            int n = config.getLogs()[i].size();
             if (n > logsize) {
                 logsize = n;
             }
