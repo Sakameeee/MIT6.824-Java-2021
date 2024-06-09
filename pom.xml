@@ -13,6 +13,7 @@
         <module>my-rpc</module>
         <module>map-reduce</module>
         <module>raft</module>
+        <module>kv-raft</module>
     </modules>
 
     <properties>
@@ -27,7 +28,7 @@
             <artifactId>lombok</artifactId>
             <version>1.18.30</version>
         </dependency>
-        <!-- https://hutool.cn/docs/index.html#/-->
+        <!-- HTTPS://HUTOOL_CN/DOCS/INDEX_HTML#/-->
         <dependency>
             <groupId>cn.hutool</groupId>
             <artifactId>hutool-all</artifactId>

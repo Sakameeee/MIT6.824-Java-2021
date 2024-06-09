@@ -7,6 +7,7 @@ import com.sakame.model.Entry;
 import com.sakame.model.RaftState;
 import com.sakame.model.dto.*;
 import com.sakame.service.RaftService;
+import com.sakame.utils.RpcUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -328,7 +329,8 @@ public class Raft implements RaftService {
 
             int peer = i;
             tasks[i] = CompletableFuture.supplyAsync(() -> {
-                RequestVoteResponse response = sendRequestVote(peer, request);
+//                RequestVoteResponse response = sendRequestVote(peer, request);
+                RequestVoteResponse response = RpcUtils.call(state.getMe(), peer, state.getPeers()[peer], "requestVote", request);
 
                 if (response == null) {
                     return 0;
@@ -447,7 +449,8 @@ public class Raft implements RaftService {
         request.setEntries(entries);
         state.getLock().unlock();
 
-        AppendEntriesResponse response = sendAppendEntries(server, request);
+//        AppendEntriesResponse response = sendAppendEntries(server, request);
+        AppendEntriesResponse response = RpcUtils.call(state.getMe(), server, state.getPeers()[server], "requestAppendEntries", request);
         if (response == null) {
             return;
         }
@@ -509,6 +512,7 @@ public class Raft implements RaftService {
      * 使用安装快照恢复的方式复制日志(在 leader 每次生成 snapshot 后仅调用一次)
      * 仅更新 follower 的日志起点(先清空)，并更新 leader 维护的 nextIndex
      * 后续的复制日志还是依靠 appendTo 函数
+     *
      * @param server
      */
     public void doInstallSnapshot(int server) {
@@ -529,7 +533,8 @@ public class Raft implements RaftService {
         request.setData(data);
         state.getLock().unlock();
 
-        InstallSnapshotResponse response = sendInstallSnapshot(server, request);
+//        InstallSnapshotResponse response = sendInstallSnapshot(server, request);
+        InstallSnapshotResponse response = RpcUtils.call(state.getMe(), server, state.getPeers()[server], "requestInstallSnapshot", request);
         if (response == null) {
             return;
         }
@@ -979,6 +984,7 @@ public class Raft implements RaftService {
 
     /**
      * 持久化 snapshot 和 raft state
+     *
      * @param snapshot
      */
     public void persistSnapshot(byte[] snapshot) {

@@ -16,6 +16,7 @@ import com.sakame.serializer.SerializerKeys;
 import com.sakame.server.VertxHttpServer;
 import com.sakame.service.RaftService;
 import lombok.extern.slf4j.Slf4j;
+
 import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -71,7 +72,7 @@ public class RaftApplication {
             serviceMetaInfo.setServiceName(RaftService.class.getName());
             serviceMetaInfo.setServiceVersion(RpcConstant.DEFAULT_SERVICE_VERSION);
             serviceMetaInfo.setServiceHost(rpcConfig.getServerHost());
-            serviceMetaInfo.setServicePort(++port);
+            serviceMetaInfo.setServicePort(port++);
             services[j] = serviceMetaInfo;
             logs[j] = new HashMap<>();
             try {
@@ -122,6 +123,7 @@ public class RaftApplication {
     /**
      * 周期性的生成 raft state 的快照
      * 与 applier 互斥，在包含 applier 功能的基础上加入了 snapshot 的生成和解析
+     *
      * @param i
      * @param channel
      */
@@ -140,8 +142,7 @@ public class RaftApplication {
                 if (config.getRafts()[i].condInstallSnapshot(applyMsg.getSnapShotTerm(), applyMsg.getSnapShotIndex(), applyMsg.getSnapShot())) {
                     config.getLogs()[i] = new HashMap<>();
                     try {
-                        // todo:
-                        Integer o = serializer.deserialize(applyMsg.getSnapShot(), Integer.class);
+                        Object o = serializer.deserialize(applyMsg.getSnapShot(), Object.class);
                         config.getLogs()[i].put(applyMsg.getSnapShotIndex(), o);
                     } catch (IOException e) {
                         throw new RuntimeException(e);
@@ -577,6 +578,7 @@ public class RaftApplication {
 
     /**
      * 获取 logs map 存储的日志数量
+     *
      * @return
      */
     public int logSize() {

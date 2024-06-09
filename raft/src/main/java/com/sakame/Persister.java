@@ -26,12 +26,12 @@ public class Persister extends CloneSupport<Persister> {
     /**
      * 存放 raft state 的部分属性
      */
-    private byte[] raftState;
+    private byte[] raftState = new byte[0];
 
     /**
      * 存放裁切位置对应的 cmd
      */
-    private byte[] snapshot;
+    private byte[] snapshot = new byte[0];
 
     public void persist(RaftState raftState) {
         saveRaftState(genRaftStateBytes(raftState));

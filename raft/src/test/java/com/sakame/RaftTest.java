@@ -3,14 +3,9 @@ package com.sakame;
 import cn.hutool.core.collection.CollectionUtil;
 import cn.hutool.core.util.ArrayUtil;
 import com.sakame.model.Channel;
-import com.sakame.model.dto.ApplyMsg;
-import com.sakame.serializer.Serializer;
-import com.sakame.serializer.SerializerFactory;
-import com.sakame.serializer.SerializerKeys;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.*;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;

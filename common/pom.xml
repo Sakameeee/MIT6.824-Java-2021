@@ -8,5 +8,4 @@
     </parent>
     <artifactId>common</artifactId>
     <name>common</name>
-    <url>http://maven.apache.org</url>
 </project>

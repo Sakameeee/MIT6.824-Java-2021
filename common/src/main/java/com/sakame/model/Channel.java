@@ -24,15 +24,20 @@ public class Channel<T> {
 
     private BlockingQueue<T> queue;
 
+    private int capacity = -1;
+
     public Channel() {
     }
 
     public Channel(int capacity) {
         queue = new LinkedBlockingQueue<>(capacity);
-
+        this.capacity = capacity;
     }
 
-    public void writeOne(T o) {
+    public boolean writeOne(T o) {
+        if (capacity != -1) {
+            return write(o);
+        }
         lock.lock();
 
         try {
@@ -47,9 +52,13 @@ public class Channel<T> {
         } finally {
             lock.unlock();
         }
+        return true;
     }
 
     public T readOne() {
+        if (capacity != -1) {
+            return read();
+        }
         T tmp = null;
         lock.lock();
 
@@ -69,15 +78,23 @@ public class Channel<T> {
         }
     }
 
-    public void write(T o) {
+    public boolean write(T o) {
+        if (capacity == -1) {
+            return writeOne(o);
+        }
+        boolean ret;
         try {
-            queue.offer(o, 100, TimeUnit.MILLISECONDS);
+            ret = queue.offer(o, 100, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
+        return ret;
     }
 
     public T read() {
+        if (capacity == -1) {
+            return readOne();
+        }
         try {
             return queue.poll(100, TimeUnit.MILLISECONDS);
         } catch (InterruptedException e) {
