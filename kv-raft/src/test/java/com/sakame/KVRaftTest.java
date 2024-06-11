@@ -403,4 +403,115 @@ class KVRaftTest {
         genericTest("3A", 5, 5, true, true, -1, false);
     }
 
+    @Test
+    void testSnapshotRPC3B() throws InterruptedException {
+        final int servers = 3;
+        int maxRaftState = 1000;
+        KVRaftApplication application = new KVRaftApplication();
+        application.init(servers, maxRaftState);
+
+        Client client = application.makeClient();
+        log.info("Test: InstallSnapshot RPC (3B)");
+
+        client.put("a", "A");
+        Assertions.assertTrue(check(client, "a", "A"));
+
+        // 向大分区中提交大量命令
+        application.partition(new int[]{0, 1}, new int[]{2});
+        {
+            Client client1 = application.makeClient();
+            application.disconnectClient(client1, new int[]{2});
+            for (int i = 0; i < 50; i++) {
+                client1.put(String.valueOf(i), String.valueOf(i));
+            }
+            Thread.sleep(ELECTION_TIMEOUT);
+            client1.put("b", "B");
+        }
+
+        // 检查日志是否正确裁切
+        int size = application.logSize();
+        Assertions.assertTrue(size < 8 * maxRaftState);
+
+        // 将之前小分区的 server 放到大分区中，检查是否正常日志追赶
+        application.partition(new int[]{0, 2}, new int[]{1});
+        {
+            Client client1 = application.makeClient();
+            application.disconnectClient(client1, new int[]{1});
+            client1.put("c", "C");
+            client1.put("d", "D");
+            Assertions.assertTrue(check(client1, "a", "A"));
+            Assertions.assertTrue(check(client1, "b", "B"));
+            Assertions.assertTrue(check(client1, "1", "1"));
+            Assertions.assertTrue(check(client1, "49", "49"));
+        }
+
+        // 恢复所有连接
+        application.partition(new int[]{1, 2, 3}, new int[]{});
+        client.put("e", "E");
+        Assertions.assertTrue(check(client, "c", "C"));
+        Assertions.assertTrue(check(client, "e", "E"));
+        Assertions.assertTrue(check(client, "1", "1"));
+
+        application.cleanup();
+    }
+
+    @Test
+    void testSnapshotSize3B() {
+        final int servers = 3;
+        int maxRaftState = 1000;
+        int maxSnapshotState = 500;
+        KVRaftApplication application = new KVRaftApplication();
+        application.init(servers, maxRaftState);
+
+        Client client = application.makeClient();
+        log.info("Test: snapshot size is reasonable (3B)");
+
+        for (int i = 0; i < 200; i++) {
+            client.put("x", "0");
+            Assertions.assertTrue(check(client, "x", "0"));
+            client.put("x", "1");
+            Assertions.assertTrue(check(client, "x", "1"));
+        }
+
+        Assertions.assertTrue(application.snapshotSize() < maxSnapshotState);
+        Assertions.assertTrue(application.logSize() < maxRaftState * 8);
+
+        application.cleanup();
+    }
+
+    @Test
+    void testSpeed3B() {
+        genericTestSpeed("3B", 1000);
+    }
+
+    @Test
+    void testSnapshotRecover3B() throws InterruptedException {
+        genericTest("3B", 1, 5, true, false, 1000, false);
+    }
+
+    @Test
+    void testSnapshotRecoverManyClients3B() throws InterruptedException {
+        genericTest("3B", 20, 5, true, false, 1000, false);
+    }
+
+    @Test
+    void testSnapshotUnreliable3B() throws InterruptedException {
+        genericTest("3B", 5, 5, false, false, 1000, false);
+    }
+
+    @Test
+    void testSnapshotUnreliableRecover3B() throws InterruptedException {
+        genericTest("3B", 5, 5, true, false, 1000, false);
+    }
+
+    @Test
+    void testSnapshotUnreliableRecoverConcurrentPartition3B() throws InterruptedException {
+        genericTest("3B", 5, 5, true, true, 1000, false);
+    }
+
+    @Test
+    void testSnapshotUnreliableRecoverConcurrentPartitionLinearizable3B() throws InterruptedException {
+        genericTest("3B", 15, 7, true, true, 1000, true);
+    }
+
 }

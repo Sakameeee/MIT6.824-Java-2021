@@ -1,21 +1,24 @@
 package com.sakame;
 
+import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.util.ArrayUtil;
 import com.sakame.common.CommandContext;
 import com.sakame.common.CommandType;
 import com.sakame.constant.Message;
 import com.sakame.constant.TimeConstant;
-import com.sakame.model.Channel;
-import com.sakame.model.Command;
-import com.sakame.model.IndexAndTerm;
-import com.sakame.model.ServerState;
+import com.sakame.model.*;
 import com.sakame.model.dto.ApplyMsg;
 import com.sakame.model.dto.CommandRequest;
 import com.sakame.model.dto.CommandResponse;
+import com.sakame.serializer.Serializer;
+import com.sakame.serializer.SerializerFactory;
+import com.sakame.serializer.SerializerKeys;
 import com.sakame.server.VertxHttpServer;
 import com.sakame.service.KVServerService;
 import com.sakame.service.RaftService;
 import lombok.extern.slf4j.Slf4j;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
@@ -28,6 +31,10 @@ import java.util.HashMap;
 public class KVServer implements KVServerService {
 
     private ServerState state = new ServerState();
+
+    private static final int SNAPSHOT_LOG_GAP = 3;
+
+    private static final double THRESHOLD = 0.8;
 
     public VertxHttpServer init(int me, RaftService[] peers, Persister persister, int maxRaftState) {
         state.setMe(me);
@@ -42,7 +49,11 @@ public class KVServer implements KVServerService {
         state.setLastApplied(0);
         state.setLastSnapshot(0);
 
+        // 每次初始化都从持久化对象中恢复数据，只读取 snapshot 而非 raftState
+        installSnapshot(persister.readSnapshot());
+
         new Thread(this::applier).start();
+        new Thread(this::snapshoter).start();
         return new VertxHttpServer(raft);
     }
 
@@ -117,7 +128,7 @@ public class KVServer implements KVServerService {
     }
 
     /**
-     * 代替了 RaftApplication 的 applier，接收来自 leader 提交的日志
+     * 代替了 RaftApplication 的 applierSnap，接收来自 leader 提交的日志
      * handler 向 raft 中追加命令，raft 只负责记录命令序列
      * 在保证一致性的情况下 raft 会向 applier 提交命令，实际调用 kv 存储并执行命令是在 applier 中完成的
      */
@@ -173,6 +184,14 @@ public class KVServer implements KVServerService {
                     }
 
                     state.getLock().unlock();
+                } else if (applyMsg.isSnapShotValid()) {
+                    state.getLock().lock();
+                    // follower 会在每次生成快照后进入这个分支一次，raft 和 kv server 同时完成快照的安装
+                    if (state.getRaft().condInstallSnapshot(applyMsg.getSnapShotTerm(), applyMsg.getSnapShotIndex(), applyMsg.getSnapShot())) {
+                        installSnapshot(applyMsg.getSnapShot());
+                        state.setLastApplied(applyMsg.getSnapShotIndex());
+                    }
+                    state.getLock().unlock();
                 }
             } else {
                 try {
@@ -182,6 +201,84 @@ public class KVServer implements KVServerService {
                 }
             }
         }
+    }
+
+    /**
+     * kv server 初始化时开启该线程，检查是否需要裁切日志生成快照
+     */
+    public void snapshoter() {
+        while (!killed()) {
+            state.getLock().lock();
+            if (isNeedSnapshot()) {
+                doSnapshot(state.getLastApplied());
+                state.setLastSnapshot(state.getLastApplied());
+            }
+            state.getLock().unlock();
+            try {
+                Thread.sleep(TimeConstant.SNAPSHOT_GAP_TIME);
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    /**
+     * 生成快照，由 snapshoter 调用，实质是生成数据后调用 raft 的 snapshot
+     *
+     * @param commandIndex
+     */
+    public void doSnapshot(int commandIndex) {
+        log.info("kv server {} do snapshot", state.getMe());
+        final Serializer serializer = SerializerFactory.getInstance(SerializerKeys.KRYO);
+        ServerStatePersist statePersist = new ServerStatePersist();
+        BeanUtil.copyProperties(state, statePersist);
+        byte[] snapshot;
+        try {
+            snapshot = serializer.serialize(statePersist);
+            if (ArrayUtil.isEmpty(snapshot)) {
+                throw new RuntimeException("snapshot failure");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        state.getRaft().snapshot(commandIndex, snapshot);
+    }
+
+    /**
+     * 安装快照，和 raft 中的 condInstallSnapshot 差不多
+     *
+     * @param snapshot
+     */
+    public void installSnapshot(byte[] snapshot) {
+        if (ArrayUtil.isEmpty(snapshot)) {
+            return;
+        }
+
+        log.info("kv server {} install snapshot", state.getMe());
+        final Serializer serializer = SerializerFactory.getInstance(SerializerKeys.KRYO);
+        try {
+            ServerStatePersist deserialize = serializer.deserialize(snapshot, ServerStatePersist.class);
+            BeanUtil.copyProperties(deserialize, state);
+        } catch (IOException e) {
+            throw new RuntimeException("install snapshot failure");
+        }
+    }
+
+    /**
+     * 检查是否需要生成快照（一般是 leader 调用）
+     * 1.是否开启 snapshot
+     * 2.raft state（带有日志会逐渐变大）是否超过预期大小
+     * 3.lastApplied 和 lastSnapshot 的间隔是否大于预期值
+     *
+     * @return
+     */
+    public boolean isNeedSnapshot() {
+        if (state.getMaxRaftState() != -1
+                && state.getRaft().getRaftPersistSize() > THRESHOLD * state.getMaxRaftState()
+                && state.getLastApplied() > state.getLastSnapshot() + SNAPSHOT_LOG_GAP) {
+            return true;
+        }
+        return false;
     }
 
     /**

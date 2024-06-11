@@ -992,6 +992,18 @@ public class Raft implements RaftService {
     }
 
     /**
+     * 获取 raft state 持久化数据大小
+     *
+     * @return
+     */
+    public int getRaftPersistSize() {
+        state.getLock().lock();
+        int size = state.getPersister().raftStateSize();
+        state.getLock().unlock();
+        return size;
+    }
+
+    /**
      * 获取自身当前所处的 term
      *
      * @return

@@ -50,7 +50,14 @@ public class VertxHttpServer implements HttpServer {
         if (httpServer == null) {
             return;
         }
-        httpServer.close();
-        vertx.close();
+        httpServer.close(res -> {
+            if (res.succeeded()) {
+                vertx.close(result -> {
+                    if (result.succeeded()) {
+                        System.out.println("shutdown server gracefully");
+                    }
+                });
+            }
+        });
     }
 }

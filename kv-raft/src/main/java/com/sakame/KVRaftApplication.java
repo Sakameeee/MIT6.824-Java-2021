@@ -12,6 +12,7 @@ import com.sakame.server.VertxHttpServer;
 import com.sakame.service.KVServerService;
 import com.sakame.service.RaftService;
 import com.sakame.utils.RpcUtils;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.stream.IntStream;
 
@@ -19,6 +20,7 @@ import java.util.stream.IntStream;
  * @author sakame
  * @version 1.0
  */
+@Slf4j
 public class KVRaftApplication {
 
     private final KVRaftConfig config = KVRaftConfig.getConfig();
@@ -164,10 +166,12 @@ public class KVRaftApplication {
         disconnectUnlocked(server, all());
         config.getRaftServers()[server].doShutdown();
         config.getKvRaftServers()[server].doShutdown();
+        log.info("shutdown kv server {}", server);
+
 
         Persister persister = config.getSaved()[server];
         if (persister != null) {
-            persister = persister.clone();
+            config.getSaved()[server] = persister.clone();
         }
 
         KVServer kvServer = config.getKvServers()[server];

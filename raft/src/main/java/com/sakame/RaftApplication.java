@@ -137,7 +137,7 @@ public class RaftApplication {
                 // 1.raft 接收到 requestInstallSnapshot 请求不会第一时间清空日志
                 // 2.而是告知 application，application 清空自己维护的 log 并更新起点
                 // 3.由 application 调用 raft 对外暴露的接口(condInstallSnapshot)，间接修改 raft 的日志(即清空或裁切并更新起点)
-                // 4.一般情况下 leader 会进入下面的 if 分支生成快照，而 follower 会在 leader 生成快照之后接收到 requestInstallSnapshot 从而进入这个分支并调用 condInstallSnapshot
+                // 4.一般情况下 leader 会进入第二个 if 分支生成快照，而 follower 会在 leader 生成快照之后接收到 requestInstallSnapshot 从而进入这个分支并调用 condInstallSnapshot
                 // 5.condInstallSnapshot 和 snapshot 效果一致都是更新提交日志后对快照持久化，区别在于调用者不同，以及 snapshot 的原数据来自 leader 的日志不为 null，而 condInstallSnapshot 的数据来源于 request，如果 follower 进入下面的分支会因为 cmd 为 null 而无法序列化
                 if (config.getRafts()[i].condInstallSnapshot(applyMsg.getSnapShotTerm(), applyMsg.getSnapShotIndex(), applyMsg.getSnapShot())) {
                     config.getLogs()[i] = new HashMap<>();

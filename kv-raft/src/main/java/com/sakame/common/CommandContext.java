@@ -3,6 +3,7 @@ package com.sakame.common;
 import com.sakame.model.dto.CommandResponse;
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 命令上下文，KVServer 记录成功提交的命令
@@ -12,6 +13,7 @@ import lombok.Data;
  */
 @Data
 @AllArgsConstructor
+@NoArgsConstructor
 public class CommandContext {
 
     /**
