@@ -84,9 +84,9 @@ public class Worker {
 
         while (true) {
             GetTaskRequest getTaskRequest = new GetTaskRequest();
-            System.out.println("get task request:" + getTaskRequest);
+            log.info("get task request:{}", getTaskRequest);
             GetTaskResponse getTaskResponse = callGetTask(getTaskRequest);
-            System.out.println("receive task reply:" + getTaskResponse);
+            log.info("receive task reply:{}", getTaskResponse);
 
             if (getTaskResponse == null || getTaskResponse.getType() == TaskType.STOP) {
                 return;
@@ -96,32 +96,30 @@ public class Worker {
             switch (getTaskResponse.getType()) {
                 case TaskType.MAP:
                     if (CollUtil.isEmpty(getTaskResponse.getFileNames())) {
-                        // todo
+                        return;
                     }
                     doMap(map, getTaskResponse, objects[2]);
                     FinishTaskRequest finishTaskRequest = FinishTaskRequest.builder()
                             .taskId(getTaskResponse.getTaskId())
                             .type(TaskType.MAP)
                             .build();
-                    System.out.println("finish request:" + finishTaskRequest);
+                    log.info("finish request:{}", finishTaskRequest);
                     callFinishTask(finishTaskRequest);
-                    System.out.println("receive finish reply:");
                     break;
                 case TaskType.REDUCE:
                     if (CollUtil.isEmpty(getTaskResponse.getFileNames())) {
-                        // todo
+                        return;
                     }
                     doReduce(reduce, getTaskResponse, objects[2]);
                     FinishTaskRequest finishTaskRequest1 = FinishTaskRequest.builder()
                             .taskId(getTaskResponse.getTaskId())
                             .type(TaskType.REDUCE)
                             .build();
-                    System.out.println("finish request:" + finishTaskRequest1);
+                    log.info("finish request:{}", finishTaskRequest1);
                     callFinishTask(finishTaskRequest1);
-                    System.out.println("receive finish reply:");
                     break;
                 case TaskType.WAIT:
-                    System.out.println("wait task");
+                    log.info("wait task");
                     try {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
@@ -175,7 +173,7 @@ public class Worker {
                 .collect(Collectors.toList());
 
         // 创建临时文件
-        System.out.println("encode to json");
+        log.info("encode to json");
         List<File> files = new ArrayList<>();
         for (int i = 0; i < nReduce; i++) {
             try {
@@ -250,7 +248,6 @@ public class Worker {
             } catch (Exception e) {
                 e.printStackTrace();
             }
-            // todo:
             boolean delete = new File(fileName).delete();
             if (!delete) {
                 log.warn("fail to delete temp file:" + fileName);

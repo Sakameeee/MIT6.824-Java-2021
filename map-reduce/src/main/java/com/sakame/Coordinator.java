@@ -18,6 +18,7 @@ import com.sakame.registry.RegistryFactory;
 import com.sakame.server.HttpServer;
 import com.sakame.server.VertxHttpServer;
 import com.sakame.service.CoordinatorService;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.nio.file.DirectoryStream;
@@ -37,6 +38,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author sakame
  * @version 1.0
  */
+@Slf4j
 public class Coordinator implements CoordinatorService {
     private static final String GLOBAL_DIR = System.getProperty("user.dir") + "\\map-reduce\\tmp";
     private static volatile CoordinatorStatus status = new CoordinatorStatus();
@@ -66,9 +68,7 @@ public class Coordinator implements CoordinatorService {
      * @param nReduce
      */
     private static void init(List<String> files, int nReduce) {
-        System.out.println("init coordinator");
-
-        System.out.println("make map tasks");
+        log.info("init coordinator, make map tasks");
         int n = files.size();
         List<Task> tasks = new ArrayList<>();
         for (int i = 0; i < n; i++) {
@@ -122,7 +122,7 @@ public class Coordinator implements CoordinatorService {
             Task task = tasks.get(i);
             getTaskResponse.setTaskId(i);
             if (task.getStatus() == TaskStatus.IDLE) {
-                System.out.println("send task " + i + " to worker");
+                log.info("send task {} to worker", i);
                 if (status.getStatus() == MasterStatus.MAP_PHASE) {
                     // 在 map 任务里有 mapCount 个任务，每个任务的文件数组都是一样的，大小为 mapCount
                     // worker 只需要一个文件就能完成任务
@@ -142,7 +142,7 @@ public class Coordinator implements CoordinatorService {
                 return getTaskResponse;
             } else if (task.getStatus() == TaskStatus.IN_PROGRESS) {
                 if (task.getStartTime().plus(Duration.ofSeconds(10)).isBefore(LocalDateTime.now())) {
-                    System.out.println("resend task " + i + " to worker");
+                    log.info("resend task {} to worker", i);
                     if (status.getStatus() == MasterStatus.MAP_PHASE) {
                         getTaskResponse.setFileNames(Arrays.asList(task.getFiles().get(i)));
                         getTaskResponse.setType(TaskType.MAP);
@@ -176,7 +176,6 @@ public class Coordinator implements CoordinatorService {
         FinishTaskResponse reply = new FinishTaskResponse();
 
         if (finishTaskRequest.getTaskId() < 0 || finishTaskRequest.getTaskId() > status.getTasks().size()) {
-            // todo
             reply.setOK(false);
             status.getReentrantLock().unlock();
             return reply;
@@ -220,7 +219,7 @@ public class Coordinator implements CoordinatorService {
      * 所有 map 任务均完成调用，重新生成 tasks 数组用于 reduce
      */
     public void makeReduceTasks() {
-        System.out.println("make reduce tasks");
+        log.info("make reduce task");
         List<Task> tasks = new ArrayList<>();
         for (int i = 0; i < status.getNReduce(); i++) {
             Task task = new Task();
@@ -261,11 +260,11 @@ public class Coordinator implements CoordinatorService {
      */
     public void nextPhase() {
         if (status.getStatus() == MasterStatus.MAP_PHASE) {
-            System.out.println("change to REDUCE_PHASE");
+            log.info("change to REDUCE_PHASE");
             makeReduceTasks();
             status.setStatus(MasterStatus.REDUCE_PHASE);
         } else if (status.getStatus() == MasterStatus.REDUCE_PHASE) {
-            System.out.println("change to FINISH_PHASE");
+            log.info("change to FINISH_PHASE");
             status.setStatus(MasterStatus.FINISH_PHASE);
         }
     }
