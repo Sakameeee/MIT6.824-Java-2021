@@ -335,7 +335,7 @@ public class Raft implements RaftService {
                 if (response == null) {
                     return 0;
                 }
-                System.out.println("raft:" + peer + response);
+                log.info("raft{} {}", peer, response);
 
                 lock.lock();
 
@@ -454,7 +454,7 @@ public class Raft implements RaftService {
         if (response == null) {
             return;
         }
-        System.out.println("raft:" + server + response);
+        log.info("raft:{} {}", server, response);
 
         state.getLock().lock();
         // 检查 leader 状态
@@ -538,7 +538,7 @@ public class Raft implements RaftService {
         if (response == null) {
             return;
         }
-        System.out.println("raft:" + server + response);
+        log.info("raft:{} {}", server, response);
 
         state.getLock().lock();
 
