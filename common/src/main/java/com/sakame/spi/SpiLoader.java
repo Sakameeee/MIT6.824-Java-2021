@@ -99,7 +99,6 @@ public class SpiLoader {
         String tClassName = tClass.getName();
         Map<String, Class<?>> keyClassMap = loaderMap.get(tClassName);
         if (keyClassMap == null) {
-            // todo: 自定义异常
             throw new RuntimeException(String.format("SpiLoader did not load type %s", tClassName));
         }
         if (!keyClassMap.containsKey(key)) {
